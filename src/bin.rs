@@ -1,15 +1,19 @@
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Write};
 
-use bson::Document;
-use koi::run;
+use koi::file::FileHeader;
 
 fn main() {
-    let bytes = hex::decode("0C0000001069000100000000").unwrap();
+    let mut bytes = vec![];
+
+    let header = FileHeader::new(1, None);
+    header.write(&mut bytes).unwrap();
+    bytes.write_all(b"Hello, world!").unwrap();
+
     let reader = &mut bytes.as_slice();
     let mut buffer = BufReader::new(reader);
 
-    let doc = Document::from_reader(&mut buffer).unwrap();
-    println!("{:?}", doc);
+    let header = FileHeader::read(&mut buffer).unwrap();
+    println!("{:?}", header);
 
     let mut buf = Vec::new();
     buffer.read_to_end(&mut buf).unwrap();
