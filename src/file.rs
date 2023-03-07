@@ -1,17 +1,22 @@
-use std::io::{Error, ErrorKind, Read, Write};
+use std::{
+    any::Any,
+    io::{Read, Write},
+};
 
+use crate::{
+    types::{Channels, MAGIC},
+    QoirDecodeError, QoirEncodeError,
+};
 use bson::{Binary, Document};
-
-use crate::{QoirDecodeError, QoirEncodeError};
-
-// magic number to identify koi files (KOI + 🙂|🙃)
-const MAGIC: &[u8] = b"KOI\xF0\x9F\x99\x82|\xF0\x9F\x99\x83";
 
 #[derive(Debug)]
 pub struct FileHeader {
     version: u32,
     data_size: u64,
     exif: Option<Vec<u8>>,
+    width: u32,
+    height: u32,
+    channels: Channels,
 }
 
 #[inline]
@@ -23,11 +28,20 @@ fn to_binary(bytes: Vec<u8>) -> Binary {
 }
 
 impl FileHeader {
-    pub fn new(data_size: u64, exif: Option<Vec<u8>>) -> FileHeader {
+    pub fn new(
+        data_size: u64,
+        exif: Option<Vec<u8>>,
+        width: u32,
+        height: u32,
+        channels: Channels,
+    ) -> FileHeader {
         FileHeader {
             version: 0,
             data_size,
             exif,
+            width,
+            height,
+            channels,
         }
     }
 
@@ -63,24 +77,32 @@ impl FileHeader {
     pub fn read(reader: &mut dyn Read) -> Result<FileHeader, QoirDecodeError> {
         FileHeader::check_magic(reader)?;
 
-        let doc = Document::from_reader(reader).map_err(|_| {
-            QoirDecodeError::InvalidFileHeader("Failed to read file header".to_string())
-        })?;
+        let doc = Document::from_reader(reader).map_err(err("Failed to read file header"))?;
 
-        let version = doc.get_i32("version").map_err(|_| {
-            QoirDecodeError::InvalidFileHeader("Failed to read file version".to_string())
-        })?;
-
-        let data_size = doc.get_i64("data_size").map_err(|_| {
-            QoirDecodeError::InvalidFileHeader("Failed to read data size".to_string())
-        })? as u64;
-
-        let exif = doc.get_binary_generic("exif").ok().map(|b| b.to_vec());
+        let (version, data_size, exif, width, height, channels) = (
+            doc.get_i32("version")
+                .map_err(err("Failed to read file version"))? as u32,
+            doc.get_i64("data_size")
+                .map_err(err("Failed to read data size"))? as u64,
+            doc.get_binary_generic("exif").ok().map(|b| b.to_vec()),
+            doc.get_i32("width").map_err(err("Failed to read width"))? as u32,
+            doc.get_i32("height")
+                .map_err(err("Failed to read height"))? as u32,
+            doc.get_i32("channels")
+                .map_err(err("Failed to read channels"))? as u32,
+        );
 
         Ok(Self {
-            version: version as u32,
-            data_size: data_size as u64,
+            version,
+            data_size,
             exif,
+            width,
+            height,
+            channels: channels.try_into().map_err(err("Invalid channels"))?,
         })
     }
+}
+
+fn err<F>(e: &str) -> impl FnOnce(F) -> QoirDecodeError + '_ {
+    |_| QoirDecodeError::InvalidFileHeader(e.to_string())
 }

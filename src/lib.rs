@@ -5,9 +5,11 @@ use thiserror::Error;
 use lz4_flex::block::CompressError as Lz4CompressError;
 use lz4_flex::block::DecompressError as Lz4DecompressError;
 use lz4_flex::frame::Error as Lz4FrameError;
+use types::RgbaColor;
 
 pub mod file;
-
+pub mod types;
+pub mod util;
 pub fn run() {}
 
 #[derive(Error, Debug)]
@@ -40,17 +42,22 @@ pub enum QoirEncodeError {
     Lz4Compress(#[from] Lz4CompressError),
 }
 
-// take a reader and return a vector of bytes
-pub fn qoir_decode(data: &mut dyn Read) -> Result<Vec<u8>, QoirDecodeError> {
-    let buffer = BufReader::new(data);
-    let mut result = Vec::new();
+pub fn qoir_decode(data: &mut dyn Read, writer: &mut dyn Write) -> Result<(), QoirDecodeError> {
+    let reader = BufReader::new(data);
+    let mut writer = BufWriter::new(writer);
+    let mut index = [RgbaColor(0, 0, 0, 0); 64];
 
-    Ok(result)
+    let mut px: RgbaColor = RgbaColor(0, 0, 0, 0);
+
+    Ok(())
 }
 
-// take a array of bytes and a writer
-pub fn qoir_encode(data: &[u8], writer: &mut dyn Write) -> Result<(), QoirEncodeError> {
-    let buffer = BufWriter::new(writer);
+pub fn qoir_encode(data: &mut dyn Read, writer: &mut dyn Write) -> Result<(), QoirEncodeError> {
+    let reader = BufReader::new(data);
+    let mut writer = BufWriter::new(writer);
+
+    let mut index = [RgbaColor(0, 0, 0, 0); 64];
+    let (mut px, mut px_prev) = (RgbaColor(0, 0, 0, 0), RgbaColor(0, 0, 0, 0));
 
     Ok(())
 }

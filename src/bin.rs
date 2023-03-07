@@ -1,11 +1,11 @@
 use std::io::{BufReader, Read, Write};
 
-use koi::file::FileHeader;
+use koi::{file::FileHeader, types::Channels};
 
 fn main() {
     let mut bytes = vec![];
 
-    let header = FileHeader::new(1, None);
+    let header = FileHeader::new(12, None, 1, 1, Channels::Gray);
     header.write(&mut bytes).unwrap();
     bytes.write_all(b"Hello, world!").unwrap();
 
