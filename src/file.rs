@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    types::{Channels, MAGIC},
+    types::{Channels, Compression, MAGIC},
     QoirDecodeError, QoirEncodeError,
 };
 use bson::{Binary, Document};
@@ -17,6 +17,7 @@ pub struct FileHeader {
     width: u32,
     height: u32,
     channels: Channels,
+    compression: Compression,
 }
 
 #[inline]
@@ -34,6 +35,7 @@ impl FileHeader {
         width: u32,
         height: u32,
         channels: Channels,
+        compression: Compression,
     ) -> FileHeader {
         FileHeader {
             version: 0,
@@ -42,6 +44,7 @@ impl FileHeader {
             width,
             height,
             channels,
+            compression,
         }
     }
 
@@ -79,7 +82,7 @@ impl FileHeader {
 
         let doc = Document::from_reader(reader).map_err(err("Failed to read file header"))?;
 
-        let (version, data_size, exif, width, height, channels) = (
+        let (version, data_size, exif, width, height, channels, compression) = (
             doc.get_i32("version")
                 .map_err(err("Failed to read file version"))? as u32,
             doc.get_i64("data_size")
@@ -90,6 +93,8 @@ impl FileHeader {
                 .map_err(err("Failed to read height"))? as u32,
             doc.get_i32("channels")
                 .map_err(err("Failed to read channels"))? as u32,
+            doc.get_i32("compression")
+                .map_err(err("Failed to read compression"))? as u32,
         );
 
         Ok(Self {
@@ -99,6 +104,7 @@ impl FileHeader {
             width,
             height,
             channels: channels.try_into().map_err(err("Invalid channels"))?,
+            compression: compression.try_into().map_err(err("Invalid compression"))?,
         })
     }
 }

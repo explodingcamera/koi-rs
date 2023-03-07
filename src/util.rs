@@ -1,3 +1,4 @@
+#[macro_export]
 macro_rules! color_hash {
     ($r:expr, $b:expr, $c:expr, $d:expr) => {
         // index_position = (r * 3 + g * 5 + b * 7 + a * 11) % 64

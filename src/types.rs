@@ -1,5 +1,7 @@
 use std::io::{Error, ErrorKind};
 
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+
 // magic number to identify koi files
 pub const MAGIC: &[u8] = b"KOI\xF0\x9F\x99\x82|\xF0\x9F\x99\x83";
 
@@ -26,26 +28,17 @@ impl RgbaColor {
     }
 }
 
+#[derive(IntoPrimitive, TryFromPrimitive, Debug)]
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Compression {
+    None = 0,
+    Lz4 = 1,
+}
+
+#[derive(IntoPrimitive, TryFromPrimitive, Debug)]
+#[repr(u32)]
 pub enum Channels {
     Gray = 1,
     Rgb = 3,
     Rgba = 4,
-}
-
-impl TryFrom<u32> for Channels {
-    type Error = Error;
-
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
-        match value {
-            1 => Ok(Channels::Gray),
-            3 => Ok(Channels::Rgb),
-            4 => Ok(Channels::Rgba),
-            _ => Err(Error::new(
-                ErrorKind::InvalidData,
-                format!("Invalid number of channels: {}", value),
-            )),
-        }
-    }
 }
