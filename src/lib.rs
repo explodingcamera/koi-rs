@@ -1,5 +1,5 @@
-use std::io::{BufReader, Read};
-use std::io::{BufWriter, Write};
+use std::io::Read;
+use std::io::Write;
 use thiserror::Error;
 
 use lz4_flex::block::CompressError as Lz4CompressError;
@@ -7,6 +7,8 @@ use lz4_flex::block::DecompressError as Lz4DecompressError;
 use lz4_flex::frame::{Error as Lz4FrameError, FrameDecoder, FrameEncoder};
 use types::RgbaColor;
 
+pub mod decoder;
+pub mod encoder;
 pub mod file;
 pub mod types;
 pub mod util;
