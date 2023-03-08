@@ -19,13 +19,13 @@ impl<R: Read> PixelDecoder<R> {
     pub fn new(data: Reader<R>) -> Self {
         Self {
             read_decoder: data,
-            index: [RgbaColor(0, 0, 0, 0); 64],
+            index: [RgbaColor([0, 0, 0, 0]); 64],
             op_data: 0,
             op_pos: 0,
             pixels_in: 0,
             pixels: 0,
-            px: RgbaColor(0, 0, 0, 0),
-            px_prev: RgbaColor(0, 0, 0, 0),
+            px: RgbaColor([0, 0, 0, 0]),
+            px_prev: RgbaColor([0, 0, 0, 0]),
         }
     }
 

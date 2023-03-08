@@ -100,7 +100,10 @@ impl FileHeader {
             exif,
             width,
             height,
-            channels: channels.try_into().map_err(err("Invalid channels"))?,
+            channels: u8::try_from(channels)
+                .map_err(err("Invalid channels"))?
+                .try_into()
+                .map_err(err("Invalid channels"))?,
             compression: compression.try_into().map_err(err("Invalid compression"))?,
         })
     }
