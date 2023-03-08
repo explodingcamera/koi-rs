@@ -12,14 +12,14 @@ pub struct PixelDecoder<R: Read> {
     pixels: usize,
     px: RgbaColor,
     px_prev: RgbaColor,
-    index: [RgbaColor; 64],
+    cache: [RgbaColor; 64],
 }
 
 impl<R: Read> PixelDecoder<R> {
     pub fn new(data: Reader<R>) -> Self {
         Self {
             read_decoder: data,
-            index: [RgbaColor([0, 0, 0, 0]); 64],
+            cache: [RgbaColor([0, 0, 0, 0]); 64],
             op_data: 0,
             op_pos: 0,
             pixels_in: 0,

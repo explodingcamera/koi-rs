@@ -10,6 +10,7 @@ pub const CACHE_SIZE: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RgbaColor(pub [u8; 4]);
+
 impl RgbaColor {
     pub fn to_u32(&self) -> u32 {
         let RgbaColor([r, g, b, a]) = self;
@@ -18,6 +19,16 @@ impl RgbaColor {
     pub fn from_u32(color: u32) -> Self {
         let [r, g, b, a] = color.to_be_bytes();
         RgbaColor([r, g, b, a])
+    }
+    pub fn diff_rgb(&self, color: RgbaColor) -> [i8; 3] {
+        let RgbaColor([r, g, b, _]) = self;
+        let RgbaColor([cr, cg, cb, _]) = color;
+
+        [
+            (*r as i16).wrapping_sub(cr as i16) as i8,
+            (*g as i16).wrapping_sub(cg as i16) as i8,
+            (*b as i16).wrapping_sub(cb as i16) as i8,
+        ]
     }
 }
 

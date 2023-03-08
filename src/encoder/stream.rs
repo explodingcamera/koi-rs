@@ -5,10 +5,12 @@ use crate::{
     util::pixel_hash,
 };
 use lz4_flex::frame::FrameEncoder;
-use std::io::{BufWriter, Write};
+use std::{
+    io::{BufWriter, Write},
+    ops::Sub,
+};
 
 pub struct PixelEncoder<W: Write, const C: usize> {
-    header: FileHeader,
     write_encoder: Writer<W>,
 
     runlength: u8,
@@ -19,15 +21,8 @@ pub struct PixelEncoder<W: Write, const C: usize> {
     cache: [RgbaColor; 64],
 }
 
-enum EncodedPixel {
-    Skip,
-    Single([u8; 1]),
-    Quad([u8; 4]),
-    Full([u8; 5]),
-}
-
 impl<W: Write, const C: usize> PixelEncoder<W, C> {
-    pub fn new(writer: Writer<W>, header: FileHeader) -> Self {
+    pub fn new(writer: Writer<W>) -> Self {
         Self {
             write_encoder: writer,
             cache: [RgbaColor([0, 0, 0, 0]); CACHE_SIZE],
@@ -35,19 +30,15 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
             pixels_in: 0,
             pixels_count: 0,
             pixel_pos: 0,
-            header,
         }
     }
 
-    pub fn new_lz4(writer: W, header: FileHeader) -> Self {
-        Self::new(
-            Writer::Lz4Encoder(Box::new(FrameEncoder::new(writer))),
-            header,
-        )
+    pub fn new_lz4(writer: W) -> Self {
+        Self::new(Writer::Lz4Encoder(Box::new(FrameEncoder::new(writer))))
     }
 
-    pub fn new_uncompressed(writer: W, header: FileHeader) -> Self {
-        Self::new(Writer::UncompressedEncoder(BufWriter::new(writer)), header)
+    pub fn new_uncompressed(writer: W) -> Self {
+        Self::new(Writer::UncompressedEncoder(BufWriter::new(writer)))
     }
 
     fn encode_runlength(&mut self, curr_pixel: RgbaColor) -> u8 {
@@ -60,11 +51,13 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         }
     }
 
-    fn encode_pixel(
+    #[inline]
+    pub fn encode_pixel(
         &mut self,
         curr_pixel: RgbaColor,
         prev_pixel: RgbaColor,
-    ) -> std::io::Result<EncodedPixel> {
+        writer: &mut W,
+    ) -> std::io::Result<()> {
         if C == 4 {
             assert_eq!(curr_pixel.0[3], 255);
         };
@@ -75,14 +68,15 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
             if curr_pixel == prev_pixel {
                 self.runlength += 1;
                 if self.runlength < (CACHE_SIZE as u8 - 2) && self.pixels_in < self.pixels_count {
-                    return Ok(EncodedPixel::Skip);
+                    return Ok(());
                 }
             }
             if self.runlength > 0 {
                 // finish runlength
                 let res = self.encode_runlength(curr_pixel);
                 self.cache_pixel(&mut curr_pixel);
-                return Ok(EncodedPixel::Single([res]));
+                writer.write_all(&[res])?;
+                return Ok(());
             }
         }
 
@@ -91,7 +85,8 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
             let hash = pixel_hash(curr_pixel);
             if self.cache[hash as usize] == curr_pixel {
                 self.cache_pixel(&mut curr_pixel);
-                return Ok(EncodedPixel::Single([u8::from(Op::Index) | hash]));
+                writer.write_all(&[u8::from(Op::Index) | hash])?;
+                return Ok(());
             }
         }
 
@@ -100,56 +95,52 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
             if C > Channels::Rgb as u8 as usize {
                 let RgbaColor([r, g, b, a]) = curr_pixel;
                 self.cache_pixel(&mut curr_pixel);
-                return Ok(EncodedPixel::Full([Op::Rgba.into(), r, g, b, a]));
+                writer.write_all(&[Op::Rgba as u8, r, g, b, a])?;
+                return Ok(());
             }
         }
 
         {
-            let RgbaColor([r, g, b, a]) = curr_pixel;
-            let RgbaColor([pr, pg, pb, pa]) = prev_pixel;
-
-            let diff = RgbaColor([
-                r.wrapping_sub(pr),
-                g.wrapping_sub(pg),
-                b.wrapping_sub(pb),
-                a.wrapping_sub(pa),
-            ]);
+            let diff = curr_pixel.diff_rgb(prev_pixel);
 
             // Diff encoding
             {
-                if diff != RgbaColor([0, 0, 0, 0]) {
+                if diff[0].abs() <= 1 && diff[1].abs() <= 1 && diff[2].abs() <= 1 {
                     self.cache_pixel(&mut curr_pixel);
-                    return Ok(EncodedPixel::Full([
-                        Op::Diff.into(),
-                        diff.0[0],
-                        diff.0[1],
-                        diff.0[2],
-                        diff.0[3],
-                    ]));
+                    writer.write_all(&[Op::Diff as u8
+                        | (((diff[0] + 2) << 4) as u8)
+                        | (((diff[1] + 2) << 2) as u8)
+                        | ((diff[2] + 2) as u8)])?;
+                    return Ok(());
                 }
             }
 
-            // // Luma encoding
-            // {
-            //     if
-            // }
+            // Luma encoding
+            {
+                let diff_rg: i8 = diff[0].sub(diff[1]);
+                let diff_bg: i8 = diff[2].sub(diff[1]);
+
+                if (-8..=7).contains(&diff_rg)
+                    && (-8..=7).contains(&diff_bg)
+                    && !(-31..=32).contains(&diff[1])
+                {
+                    self.cache_pixel(&mut curr_pixel);
+                    writer.write_all(&[
+                        Op::Luma as u8 | diff[1] as u8,
+                        ((diff_rg + 8) << 4) as u8 | ((diff_bg + 8) as u8),
+                    ])?;
+
+                    return Ok(());
+                }
+            }
         }
 
         // RGB encoding
-        {
-            let RgbaColor([r, g, b, _]) = curr_pixel;
-            self.cache_pixel(&mut curr_pixel);
-            return Ok(EncodedPixel::Quad([Op::Rgb.into(), r, g, b]));
-        }
+        let RgbaColor([r, g, b, _]) = curr_pixel;
+        self.cache_pixel(&mut curr_pixel);
+        writer.write_all(&[Op::Rgb as u8, r, g, b])?;
 
-        // Gray encoding
-        // {
-        //     let RgbaColor([r, _, _, _]) = self.curr_pixel;
-        //     self.finish_encode_byte();
-        //     return Ok(Some(&[Op::Gray.into(), r]));
-        // }
-
-        Ok(EncodedPixel::Skip)
+        Ok(())
     }
 
     fn cache_pixel(&mut self, curr_pixel: &mut RgbaColor) {

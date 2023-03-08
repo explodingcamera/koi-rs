@@ -20,7 +20,4 @@ fn main() {
 
     let mut buf = Vec::new();
     buffer.read_to_end(&mut buf).unwrap();
-
-    // print buf as hex
-    println!("{:?}", hex::encode(buf));
 }
