@@ -6,14 +6,8 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 pub const MAGIC: &[u8] = b"KOI\xF0\x9F\x99\x82|\xF0\x9F\x99\x83";
 
 pub const MAX_PIXELS: usize = 4_000_000;
-pub const OP_INDEX: u8 = 0x00;
-pub const OP_DIFF: u8 = 0x40;
-pub const OP_LUMA: u8 = 0x80;
-pub const OP_RUN: u8 = 0xC0;
-pub const OP_RGB: u8 = 0xfe;
-pub const OP_RGBA: u8 = 0xff;
-pub const OP_MASK: u8 = 0xC0;
-pub const PADDING: u8 = 0b00000001;
+
+pub const MASK: u8 = 0xC0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RgbaColor(pub u8, pub u8, pub u8, pub u8);
@@ -26,6 +20,20 @@ impl RgbaColor {
         let [r, g, b, a] = color.to_be_bytes();
         RgbaColor(r, g, b, a)
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum State {
+    Header = 0,
+    Footer,
+    Done,
+    None = 10,
+    Rgb,
+    Rgba,
+    Index,
+    Diff,
+    Luma,
+    Run,
 }
 
 #[derive(IntoPrimitive, TryFromPrimitive, Debug)]

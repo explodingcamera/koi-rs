@@ -1,7 +1,4 @@
-use std::{
-    any::Any,
-    io::{Read, Write},
-};
+use std::io::{Read, Write};
 
 use crate::{
     types::{Channels, Compression, MAGIC},
@@ -11,13 +8,13 @@ use bson::{Binary, Document};
 
 #[derive(Debug)]
 pub struct FileHeader {
-    version: u32,
-    data_size: u64,
-    exif: Option<Vec<u8>>,
-    width: u32,
-    height: u32,
-    channels: Channels,
-    compression: Compression,
+    pub version: u32,
+    pub data_size: u64,
+    pub exif: Option<Vec<u8>>,
+    pub width: u32,
+    pub height: u32,
+    pub channels: Channels,
+    pub compression: Compression,
 }
 
 #[inline]

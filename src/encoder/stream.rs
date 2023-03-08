@@ -1,41 +1,49 @@
+use super::writer::Writer;
+use crate::types::RgbaColor;
 use lz4_flex::frame::FrameEncoder;
 use std::io::{BufWriter, Write};
 
-pub enum Writer<W: Write> {
-    Lz4Encoder(Box<FrameEncoder<W>>),
-    UncompressedEncoder(BufWriter<W>), // FrameEncoder already buffers internally, so for consistency we also use BufWriter here
-}
-
-pub struct Encoder<W: Write> {
+pub struct PixelEncoder<W: Write> {
     write_encoder: Writer<W>,
+
+    pos: u8,
+    len: u8,
+    pixels_in: usize,
+    pixels: usize,
+    px: RgbaColor,
+    px_prev: RgbaColor,
+    index: [RgbaColor; 64],
 }
 
-impl<W: Write> Encoder<W> {
-    pub fn new(writer: W) -> Self {
+impl<W: Write> PixelEncoder<W> {
+    pub fn new(writer: Writer<W>) -> Self {
         Self {
-            write_encoder: Writer::Lz4Encoder(Box::new(FrameEncoder::new(writer))),
+            write_encoder: writer,
+            index: [RgbaColor(0, 0, 0, 0); 64],
+            pos: 0,
+            len: 0,
+            pixels_in: 0,
+            pixels: 0,
+            px: RgbaColor(0, 0, 0, 0),
+            px_prev: RgbaColor(0, 0, 0, 0),
         }
+    }
+
+    pub fn new_lz4(writer: W) -> Self {
+        Self::new(Writer::Lz4Encoder(Box::new(FrameEncoder::new(writer))))
     }
 
     pub fn new_uncompressed(writer: W) -> Self {
-        Self {
-            write_encoder: Writer::UncompressedEncoder(BufWriter::new(writer)),
-        }
+        Self::new(Writer::UncompressedEncoder(BufWriter::new(writer)))
     }
 }
 
-impl<W: Write> Write for Encoder<W> {
+impl<W: Write> Write for PixelEncoder<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self.write_encoder {
-            Writer::Lz4Encoder(ref mut encoder) => encoder.write(buf),
-            Writer::UncompressedEncoder(ref mut encoder) => encoder.write(buf),
-        }
+        self.write_encoder.write(buf)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        match self.write_encoder {
-            Writer::Lz4Encoder(ref mut encoder) => encoder.flush(),
-            Writer::UncompressedEncoder(ref mut encoder) => encoder.flush(),
-        }
+        self.write_encoder.flush()
     }
 }
