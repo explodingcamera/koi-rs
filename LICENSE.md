@@ -1,5 +1,3 @@
-# Internet Systems Consortium license
-
 Copyright (c) 2023 Henry Gressmann
 
 Permission to use, copy, modify, and/or distribute this software for any purpose
