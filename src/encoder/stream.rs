@@ -1,35 +1,29 @@
 use super::writer::Writer;
 use crate::{
-    file::FileHeader,
-    types::{Channels, Op, RgbaColor, CACHE_SIZE},
+    types::{color_diff, luma_diff, Channels, Op, RgbaColor, CACHE_SIZE},
     util::pixel_hash,
 };
 use lz4_flex::frame::FrameEncoder;
-use std::{
-    io::{BufWriter, Write},
-    ops::Sub,
-};
+use std::io::{BufWriter, Write};
 
 pub struct PixelEncoder<W: Write, const C: usize> {
-    write_encoder: Writer<W>,
-
-    runlength: u8,
-    pixel_pos: u8,
-
-    pixels_in: usize,
+    writer: Writer<W>,
+    runlength: u8,       // if runlength > 0 then we are in runlength encoding mode
+    pixels_in: usize,    // pixels encoded so far
     pixels_count: usize, // total pixels in image
-    cache: [RgbaColor; 64],
+    cache: [RgbaColor; CACHE_SIZE],
+    prev_pixel: RgbaColor,
 }
 
 impl<W: Write, const C: usize> PixelEncoder<W, C> {
     pub fn new(writer: Writer<W>) -> Self {
         Self {
-            write_encoder: writer,
+            writer,
             cache: [RgbaColor([0, 0, 0, 0]); CACHE_SIZE],
             runlength: 0,
             pixels_in: 0,
             pixels_count: 0,
-            pixel_pos: 0,
+            prev_pixel: RgbaColor([0, 0, 0, 0]),
         }
     }
 
@@ -56,93 +50,72 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         &mut self,
         curr_pixel: RgbaColor,
         prev_pixel: RgbaColor,
-        writer: &mut W,
     ) -> std::io::Result<()> {
-        if C == 4 {
-            assert_eq!(curr_pixel.0[3], 255);
+        if C < Channels::Rgba as u8 as usize {
+            // alpha channel should be 255 for all pixels in RGB images
+            assert_eq!(curr_pixel.0[3], 255)
         };
+
+        self.pixels_in += 1;
         let mut curr_pixel = curr_pixel;
 
-        // runlength encoding
-        {
-            if curr_pixel == prev_pixel {
-                self.runlength += 1;
-                if self.runlength < (CACHE_SIZE as u8 - 2) && self.pixels_in < self.pixels_count {
-                    return Ok(());
-                }
-            }
-            if self.runlength > 0 {
-                // finish runlength
-                let res = self.encode_runlength(curr_pixel);
-                self.cache_pixel(&mut curr_pixel);
-                writer.write_all(&[res])?;
+        // runlength encode
+        if curr_pixel == prev_pixel {
+            self.runlength += 1;
+            // skip further encoding since runlength is increasing and we have not reached the end of the image
+            if self.runlength < (CACHE_SIZE as u8 - 2) && self.pixels_in < self.pixels_count {
                 return Ok(());
             }
+        }
+        // previous pixel was not the same or we reached the end of the image so we need to encode the runlength
+        if self.runlength > 0 {
+            let res = self.encode_runlength(curr_pixel);
+            self.cache_pixel(&mut curr_pixel);
+            self.writer.write_all(&[res])?;
+            return Ok(());
         }
 
         // index encoding
-        {
-            let hash = pixel_hash(curr_pixel);
-            if self.cache[hash as usize] == curr_pixel {
-                self.cache_pixel(&mut curr_pixel);
-                writer.write_all(&[u8::from(Op::Index) | hash])?;
-                return Ok(());
-            }
+        let hash = pixel_hash(curr_pixel);
+        if self.cache[hash as usize] == curr_pixel {
+            self.cache_pixel(&mut curr_pixel);
+            self.writer.write_all(&[u8::from(Op::Index) | hash])?;
+            return Ok(());
         }
 
-        // RGBA encoding
-        {
-            if C > Channels::Rgb as u8 as usize {
-                let RgbaColor([r, g, b, a]) = curr_pixel;
-                self.cache_pixel(&mut curr_pixel);
-                writer.write_all(&[Op::Rgba as u8, r, g, b, a])?;
-                return Ok(());
-            }
+        // RGBA encoding (whenever alpha channel changes)
+        if C > Channels::Rgb as u8 as usize && curr_pixel.0[3] != prev_pixel.0[3] {
+            self.cache_pixel(&mut curr_pixel);
+            self.writer.write_all(&[Op::Rgba as u8])?;
+            self.writer.write_all(&curr_pixel.0)?;
+            return Ok(());
         }
 
-        {
-            let diff = curr_pixel.diff_rgb(prev_pixel);
+        // Difference between current and previous pixel
+        let diff = curr_pixel.diff(&prev_pixel);
 
-            // Diff encoding
-            {
-                if diff[0].abs() <= 1 && diff[1].abs() <= 1 && diff[2].abs() <= 1 {
-                    self.cache_pixel(&mut curr_pixel);
-                    writer.write_all(&[Op::Diff as u8
-                        | (((diff[0] + 2) << 4) as u8)
-                        | (((diff[1] + 2) << 2) as u8)
-                        | ((diff[2] + 2) as u8)])?;
-                    return Ok(());
-                }
-            }
+        // Diff encoding
+        if let Some(diff) = color_diff(diff) {
+            self.cache_pixel(&mut curr_pixel);
+            self.writer.write_all(&[diff])?;
+            return Ok(());
+        }
 
-            // Luma encoding
-            {
-                let diff_rg: i8 = diff[0].sub(diff[1]);
-                let diff_bg: i8 = diff[2].sub(diff[1]);
-
-                if (-8..=7).contains(&diff_rg)
-                    && (-8..=7).contains(&diff_bg)
-                    && !(-31..=32).contains(&diff[1])
-                {
-                    self.cache_pixel(&mut curr_pixel);
-                    writer.write_all(&[
-                        Op::Luma as u8 | diff[1] as u8,
-                        ((diff_rg + 8) << 4) as u8 | ((diff_bg + 8) as u8),
-                    ])?;
-
-                    return Ok(());
-                }
-            }
+        // Luma encoding
+        if let Some(luma) = luma_diff(diff) {
+            self.cache_pixel(&mut curr_pixel);
+            self.writer.write_all(&luma)?;
+            return Ok(());
         }
 
         // RGB encoding
         let RgbaColor([r, g, b, _]) = curr_pixel;
         self.cache_pixel(&mut curr_pixel);
-        writer.write_all(&[Op::Rgb as u8, r, g, b])?;
-
+        self.writer.write_all(&[Op::Rgb as u8, r, g, b])?;
         Ok(())
     }
 
+    #[inline]
     fn cache_pixel(&mut self, curr_pixel: &mut RgbaColor) {
         let hash = pixel_hash(*curr_pixel);
         self.cache[hash as usize] = *curr_pixel;
@@ -151,10 +124,19 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
 
 impl<W: Write, const C: usize> Write for PixelEncoder<W, C> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.write_encoder.write(buf)
+        let mut i = 0;
+        while i < buf.len() {
+            let mut curr_pixel = RgbaColor([0, 0, 0, 255]);
+            curr_pixel.0[..C].copy_from_slice(&buf[i..(C + i)]);
+            self.encode_pixel(curr_pixel, self.prev_pixel)?;
+            self.prev_pixel = curr_pixel;
+            i += C;
+        }
+
+        Ok(buf.len())
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.write_encoder.flush()
+        self.writer.flush()
     }
 }
