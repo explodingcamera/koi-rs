@@ -4,35 +4,45 @@ use crate::{
     util::pixel_hash,
 };
 use lz4_flex::frame::FrameEncoder;
-use std::io::{BufWriter, Write};
+use std::io::{self, BufWriter, Read, Write};
 
+// PixelEncoder is a stream encoder that encodes pixels one by one
+// - Writer is a wrapper around the underlying writer that can be either a lz4 encoder or a regular writer
+// - C is the number of channels in the image
 pub struct PixelEncoder<W: Write, const C: usize> {
     writer: Writer<W>,
-    runlength: u8,       // if runlength > 0 then we are in runlength encoding mode
-    pixels_in: usize,    // pixels encoded so far
-    pixels_count: usize, // total pixels in image
+    runlength: u8,    // if runlength > 0 then we are in runlength encoding mode
+    pixels_in: usize, // pixels encoded so far
+    pixels_count: usize,
+
     cache: [RgbaColor; CACHE_SIZE],
     prev_pixel: RgbaColor,
 }
 
 impl<W: Write, const C: usize> PixelEncoder<W, C> {
-    pub fn new(writer: Writer<W>) -> Self {
+    pub fn new(writer: Writer<W>, pixels_count: usize) -> Self {
         Self {
             writer,
             cache: [RgbaColor([0, 0, 0, 0]); CACHE_SIZE],
             runlength: 0,
             pixels_in: 0,
-            pixels_count: 0,
+            pixels_count,
             prev_pixel: RgbaColor([0, 0, 0, 0]),
         }
     }
 
-    pub fn new_lz4(writer: W) -> Self {
-        Self::new(Writer::Lz4Encoder(Box::new(FrameEncoder::new(writer))))
+    pub fn new_lz4(writer: W, pixels_count: usize) -> Self {
+        Self::new(
+            Writer::Lz4Encoder(Box::new(FrameEncoder::new(writer))),
+            pixels_count,
+        )
     }
 
-    pub fn new_uncompressed(writer: W) -> Self {
-        Self::new(Writer::UncompressedEncoder(BufWriter::new(writer)))
+    pub fn new_uncompressed(writer: W, pixels_count: usize) -> Self {
+        Self::new(
+            Writer::UncompressedEncoder(BufWriter::new(writer)),
+            pixels_count,
+        )
     }
 
     fn encode_runlength(&mut self, curr_pixel: RgbaColor) -> u8 {
@@ -121,9 +131,15 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         self.cache[hash as usize] = *curr_pixel;
     }
 
+    // flushes the remaining pixels in the cache and writes the end of image marker, automatically called after N pixels are encoded
     pub fn finish(&mut self) -> std::io::Result<()> {
         self.writer.write_all(&END_OF_IMAGE)?;
         self.flush()
+    }
+
+    // take a reader and encode it pixel by pixel
+    pub fn encode<R: Read>(&mut self, mut reader: R) -> std::io::Result<u64> {
+        io::copy(&mut reader, self)
     }
 }
 
@@ -137,6 +153,10 @@ impl<W: Write, const C: usize> Write for PixelEncoder<W, C> {
             self.encode_pixel(curr_pixel, self.prev_pixel)?;
             self.prev_pixel = curr_pixel;
             i += C;
+        }
+
+        if self.pixels_in == self.pixels_count {
+            self.finish()?;
         }
 
         Ok(i)

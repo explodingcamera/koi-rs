@@ -8,11 +8,11 @@ pub const CACHE_SIZE: usize = 64;
 pub const END_OF_IMAGE: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01];
 
 pub const OP_INDEX: u8 = 0x00;
-pub const OP_INDEX_END: u8 = 0x00 | 0x3f;
+pub const OP_INDEX_END: u8 = 0x3F;
 pub const OP_DIFF: u8 = 0x40;
-pub const OP_DIFF_END: u8 = 0x40 | 0x3f;
+pub const OP_DIFF_END: u8 = 0x40 | 0x3F;
 pub const OP_LUMA: u8 = 0x80;
-pub const OP_LUMA_END: u8 = 0x80 | 0x3f;
+pub const OP_LUMA_END: u8 = 0x80 | 0x3F;
 pub const OP_RUNLENGTH: u8 = 0xC0;
 pub const OP_RUNLENGTH_END: u8 = 0xC0 | 0x3d;
 pub const OP_RGB: u8 = 0xfe;
@@ -46,6 +46,25 @@ impl RgbaColor {
         let g = self.0[1].wrapping_sub(other.0[1]);
         let b = self.0[2].wrapping_sub(other.0[2]);
         (r, g, b)
+    }
+
+    pub fn apply_diff(&self, b1: u8) -> Self {
+        let r = self.0[0].wrapping_add(b1 >> 4 & 0x03).wrapping_sub(2);
+        let g = self.0[1].wrapping_add(b1 >> 2 & 0x03).wrapping_sub(2);
+        let b = self.0[2].wrapping_add(b1 & 0x03).wrapping_sub(2);
+        RgbaColor([r, g, b, self.0[3]])
+    }
+
+    pub fn apply_luma(&self, b1: u8, b2: u8) -> Self {
+        let vg = (b1 & 0x3f).wrapping_sub(32);
+        let vr = vg.wrapping_sub(8).wrapping_add(b2 >> 4 & 0x0f);
+        let vb = vg.wrapping_sub(8).wrapping_add(b2 & 0x0f);
+
+        let r = self.0[0].wrapping_add(vr);
+        let g = self.0[1].wrapping_add(vg);
+        let b = self.0[2].wrapping_add(vb);
+
+        RgbaColor([r, g, b, self.0[3]])
     }
 }
 
