@@ -5,7 +5,29 @@ pub const MAGIC: &[u8] = b"KOI\xF0\x9F\x99\x82";
 pub const MAX_PIXELS: usize = 4_000_000;
 pub const MASK: u8 = 0xC0;
 pub const CACHE_SIZE: usize = 64;
+pub const END_OF_IMAGE: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01];
 
+pub const OP_INDEX: u8 = 0x00;
+pub const OP_INDEX_END: u8 = 0x00 | 0x3f;
+pub const OP_DIFF: u8 = 0x40;
+pub const OP_DIFF_END: u8 = 0x40 | 0x3f;
+pub const OP_LUMA: u8 = 0x80;
+pub const OP_LUMA_END: u8 = 0x80 | 0x3f;
+pub const OP_RUNLENGTH: u8 = 0xC0;
+pub const OP_RUNLENGTH_END: u8 = 0xC0 | 0x3d;
+pub const OP_RGB: u8 = 0xfe;
+pub const OP_RGBA: u8 = 0xff;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive)]
+#[repr(u8)]
+pub enum Op {
+    Index = OP_INDEX,
+    Diff = OP_DIFF,
+    Luma = OP_LUMA,
+    Run = OP_RUNLENGTH,
+    Rgb = OP_RGB,
+    Rgba = OP_RGBA,
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RgbaColor(pub [u8; 4]);
 
@@ -47,17 +69,6 @@ pub fn luma_diff(diff: (u8, u8, u8)) -> Option<[u8; 2]> {
         (0x00..=0x0F, 0x00..=0x3F) => Some([Op::Luma as u8 | g, r << 4 | b]),
         _ => None,
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive)]
-#[repr(u8)]
-pub enum Op {
-    Index = 0x00,
-    Diff = 0x40,
-    Luma = 0x80,
-    Run = 0xC0,
-    Rgb = 0xfe,
-    Rgba = 0xff,
 }
 
 #[derive(IntoPrimitive, TryFromPrimitive, Debug)]

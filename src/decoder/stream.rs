@@ -2,9 +2,9 @@ use lz4_flex::frame::FrameDecoder;
 use std::io::Read;
 
 use super::reader::Reader;
-use crate::types::RgbaColor;
+use crate::types::*;
 
-pub struct PixelDecoder<R: Read> {
+pub struct PixelDecoder<R: Read, const C: usize> {
     read_decoder: Reader<R>,
     op_data: u8,
     op_pos: u8,
@@ -15,7 +15,7 @@ pub struct PixelDecoder<R: Read> {
     cache: [RgbaColor; 64],
 }
 
-impl<R: Read> PixelDecoder<R> {
+impl<R: Read, const C: usize> PixelDecoder<R, C> {
     pub fn new(data: Reader<R>) -> Self {
         Self {
             read_decoder: data,
@@ -39,8 +39,19 @@ impl<R: Read> PixelDecoder<R> {
 }
 
 // implement read trait for Decoder
-impl<R: Read> Read for PixelDecoder<R> {
+impl<R: Read, const C: usize> Read for PixelDecoder<R, C> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.read_decoder.read(buf)
+        let b1 = self.read_decoder.read_u8()?;
+        match b1 {
+            OP_INDEX..=OP_INDEX_END => {}
+            OP_RGB => {}
+            OP_RGBA if C >= Channels::Rgba as u8 as usize => {}
+            OP_RUNLENGTH..=OP_RUNLENGTH_END => {}
+            OP_DIFF..=OP_DIFF_END => {}
+            OP_LUMA..=OP_LUMA_END => {}
+            _ => {}
+        }
+
+        Ok(0)
     }
 }

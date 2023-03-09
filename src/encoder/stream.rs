@@ -1,6 +1,6 @@
 use super::writer::Writer;
 use crate::{
-    types::{color_diff, luma_diff, Channels, Op, RgbaColor, CACHE_SIZE},
+    types::{color_diff, luma_diff, Channels, Op, RgbaColor, CACHE_SIZE, END_OF_IMAGE},
     util::pixel_hash,
 };
 use lz4_flex::frame::FrameEncoder;
@@ -46,7 +46,7 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
     }
 
     #[inline]
-    pub fn encode_pixel(
+    fn encode_pixel(
         &mut self,
         curr_pixel: RgbaColor,
         prev_pixel: RgbaColor,
@@ -120,12 +120,18 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         let hash = pixel_hash(*curr_pixel);
         self.cache[hash as usize] = *curr_pixel;
     }
+
+    pub fn finish(&mut self) -> std::io::Result<()> {
+        self.writer.write_all(&END_OF_IMAGE)?;
+        self.flush()
+    }
 }
 
 impl<W: Write, const C: usize> Write for PixelEncoder<W, C> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let mut i = 0;
-        while i < buf.len() {
+
+        while i + C <= buf.len() {
             let mut curr_pixel = RgbaColor([0, 0, 0, 255]);
             curr_pixel.0[..C].copy_from_slice(&buf[i..(C + i)]);
             self.encode_pixel(curr_pixel, self.prev_pixel)?;
@@ -133,7 +139,7 @@ impl<W: Write, const C: usize> Write for PixelEncoder<W, C> {
             i += C;
         }
 
-        Ok(buf.len())
+        Ok(i)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
