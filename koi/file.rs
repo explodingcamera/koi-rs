@@ -8,12 +8,12 @@ use bson::{Binary, Document};
 
 #[derive(Debug)]
 pub struct FileHeader {
-    pub version: u32,
-    pub exif: Option<Vec<u8>>,
-    pub width: u32,
-    pub height: u32,
-    pub channels: Channels,
-    pub compression: Compression,
+    pub version: u32,             // f
+    pub exif: Option<Vec<u8>>,    // e
+    pub width: u32,               // w
+    pub height: u32,              // h
+    pub channels: Channels,       // c
+    pub compression: Compression, // x
 }
 
 #[inline]
@@ -46,14 +46,14 @@ impl FileHeader {
         writer.write_all(MAGIC)?;
 
         let mut doc = Document::new();
-        doc.insert("version", self.version as i32);
-        doc.insert("width", self.width as i32);
-        doc.insert("height", self.height as i32);
-        doc.insert("channels", self.channels as i32);
-        doc.insert("compression", self.compression as i32);
+        doc.insert("v", self.version as i32);
+        doc.insert("w", self.width as i32);
+        doc.insert("h", self.height as i32);
+        doc.insert("c", self.channels as i32);
+        doc.insert("x", self.compression as i32);
 
         if let Some(exif) = &self.exif {
-            doc.insert("exif", to_binary(exif.clone()));
+            doc.insert("e", to_binary(exif.clone()));
         }
 
         Ok(doc.to_writer(writer)?)
@@ -80,15 +80,13 @@ impl FileHeader {
         let doc = Document::from_reader(reader).map_err(err("Failed to read file header"))?;
 
         let (version, exif, width, height, channels, compression) = (
-            doc.get_i32("version")
+            doc.get_i32("v")
                 .map_err(err("Failed to read file version"))? as u32,
-            doc.get_binary_generic("exif").ok().map(|b| b.to_vec()),
-            doc.get_i32("width").map_err(err("Failed to read width"))? as u32,
-            doc.get_i32("height")
-                .map_err(err("Failed to read height"))? as u32,
-            doc.get_i32("channels")
-                .map_err(err("Failed to read channels"))? as u32,
-            doc.get_i32("compression")
+            doc.get_binary_generic("e").ok().map(|b| b.to_vec()),
+            doc.get_i32("w").map_err(err("Failed to read width"))? as u32,
+            doc.get_i32("h").map_err(err("Failed to read height"))? as u32,
+            doc.get_i32("c").map_err(err("Failed to read channels"))? as u32,
+            doc.get_i32("x")
                 .map_err(err("Failed to read compression"))? as u32,
         );
 

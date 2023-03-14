@@ -5,7 +5,7 @@ pub const MAGIC: &[u8] = b"KOI\xF0\x9F\x99\x82";
 pub const MAX_PIXELS: usize = 4_000_000;
 pub const MASK: u8 = 0xC0;
 pub const CACHE_SIZE: usize = 64;
-pub const END_OF_IMAGE: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01];
+pub const END_OF_IMAGE: [u8; 8] = *b"END\x00\x00\x00\x00\x00";
 
 pub const OP_INDEX: u8 = 0x00;
 pub const OP_INDEX_END: u8 = 0x3F;

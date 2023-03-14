@@ -153,6 +153,7 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
 }
 
 impl<W: Write, const C: usize> Write for PixelEncoder<W, C> {
+    // Currently always buffers C bytes before encoding a pixel, this could be improved by only buffering the remaining bytes until the next pixel boundary is reached
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let buf_len = buf.len();
         let mut total_bytes_written = 0;
