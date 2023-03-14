@@ -8,7 +8,6 @@ use koi::{
     file::FileHeader,
     types::{Channels, Compression},
 };
-use png::Info;
 
 fn read_png(path: &str) -> (Vec<u8>, (u32, u32)) {
     let mut decoder = png::Decoder::new(File::open(path).unwrap());
@@ -21,16 +20,26 @@ fn read_png(path: &str) -> (Vec<u8>, (u32, u32)) {
     (buf, (info.width, info.height))
 }
 
+const channels: usize = 4;
+const file: &str = "koi-cli/tests/x.png";
+
 pub fn run() {
-    let (test_image, (width, height)) = read_png("koi-cli/tests/runlength.png");
+    let (test_image, (width, height)) = read_png(file);
     let mut out = File::create("test.koi").expect("Failed to create file");
 
     println!("{}", test_image.len());
 
-    let header = FileHeader::new(None, width, height, Channels::Rgba, Compression::None);
+    let header = FileHeader::new(
+        None,
+        width,
+        height,
+        (channels as u8).try_into().unwrap(),
+        Compression::None,
+    );
     header.write(&mut out).expect("Failed to write header");
 
-    let mut encoder = PixelEncoder::<_, 4>::new_uncompressed(&mut out, (width * height) as usize);
+    let mut encoder =
+        PixelEncoder::<_, channels>::new_uncompressed(&mut out, (width * height) as usize);
     encoder
         .encode(&*test_image)
         .expect("Failed to encode image");
@@ -42,19 +51,25 @@ pub fn run() {
     let header = FileHeader::read(&mut in_file).unwrap();
     println!("{:?}", header);
 
-    let mut decoder = koi::decoder::PixelDecoder::<_, 4>::new_uncompressed(
+    let mut decoder = koi::decoder::PixelDecoder::<_, channels>::new_uncompressed(
         &mut in_file,
         (width * height) as usize,
     );
 
-    let mut buf = Vec::with_capacity((width * height * 4) as usize);
+    let mut buf = Vec::with_capacity((width * height * (channels as u32)) as usize);
     decoder.decode(&mut buf).unwrap();
     println!("{}", buf.len());
     println!("{:?}", buf);
 
     let mut out = File::create("test.png").expect("Failed to create file");
     let mut encoder = png::Encoder::new(&mut out, width, height);
-    encoder.set_color(png::ColorType::Rgba);
+
+    if channels == 3 {
+        encoder.set_color(png::ColorType::Rgb);
+    } else {
+        encoder.set_color(png::ColorType::Rgba);
+    }
+
     encoder.set_depth(png::BitDepth::Eight);
     let mut writer = encoder.write_header().unwrap();
     writer.write_image_data(&buf).unwrap();

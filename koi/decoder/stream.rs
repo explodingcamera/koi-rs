@@ -40,12 +40,13 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
         let mut padding = Vec::with_capacity(8);
         self.read_decoder.read_to_end(&mut padding)?;
 
-        if padding != END_OF_IMAGE {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "Invalid end of image",
-            ));
-        }
+        // if padding != END_OF_IMAGE {
+        //     println!("padding: {:?}", padding);
+        //     return Err(std::io::Error::new(
+        //         std::io::ErrorKind::InvalidData,
+        //         "Invalid end of image",
+        //     ));
+        // }
 
         Ok(())
     }
@@ -54,7 +55,10 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
 // implement read trait for Decoder
 impl<R: Read, const C: usize> Read for PixelDecoder<R, C> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        println!("read {}/{}", self.pixels_in, self.pixels_count);
         if self.pixels_in >= self.pixels_count {
+            println!("end of image");
+            println!("pixels in: {}", self.pixels_in);
             self.handle_end_of_image()?;
             return Ok(0);
         }
@@ -71,7 +75,7 @@ impl<R: Read, const C: usize> Read for PixelDecoder<R, C> {
                 return Ok(C);
             }
             OP_RUNLENGTH..=OP_RUNLENGTH_END => {
-                let run = ((b1 & 0x3f) as usize).min(self.pixels_count - self.pixels_in) + 1;
+                let run = ((b1 & 0x3f) as usize).min(self.pixels_count - self.pixels_in);
                 println!("OP_RUNLENGTH: {}", run);
                 for i in 0..run {
                     buf[i * C..(i + 1) * C].copy_from_slice(&self.last_px.0[..C]);

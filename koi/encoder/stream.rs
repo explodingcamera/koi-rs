@@ -74,22 +74,23 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         self.pixels_in += 1;
         let mut curr_pixel = curr_pixel;
 
-        // runlength encode
-        if curr_pixel == prev_pixel {
-            self.runlength += 1;
-            // skip further encoding since runlength is increasing and we have not reached the end of the image
-            if self.runlength < (CACHE_SIZE as u8 - 2) && self.pixels_in < self.pixels_count {
-                return Ok(());
-            }
-        }
-        // previous pixel was not the same or we reached the end of the image so we need to encode the runlength
-        if self.runlength > 0 {
-            println!("adding runlength: {}", self.runlength);
-            let res = self.encode_runlength(curr_pixel);
-            self.cache_pixel(&mut curr_pixel);
-            self.writer.write_all(&[res])?;
-            return Ok(());
-        }
+        // // runlength encode
+        // currently broken
+        // if curr_pixel == prev_pixel {
+        //     self.runlength += 1;
+        //     // skip further encoding since runlength is increasing and we have not reached the end of the image
+        //     if self.runlength < (CACHE_SIZE as u8 - 2) && self.pixels_in < self.pixels_count {
+        //         return Ok(());
+        //     }
+        // }
+        // // previous pixel was not the same or we reached the end of the image so we need to encode the runlength
+        // if self.runlength > 0 {
+        //     println!("adding runlength: {}", self.runlength);
+        //     let res = self.encode_runlength(curr_pixel);
+        //     self.cache_pixel(&mut curr_pixel);
+        //     self.writer.write_all(&[res])?;
+        //     return Ok(());
+        // }
 
         // index encoding
         let hash = pixel_hash(curr_pixel);
@@ -120,12 +121,13 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         }
 
         // Luma encoding
-        if let Some(luma) = luma_diff(diff) {
-            println!("adding luma");
-            self.cache_pixel(&mut curr_pixel);
-            self.writer.write_all(&luma)?;
-            return Ok(());
-        }
+        // currently broken
+        // if let Some(luma) = luma_diff(diff) {
+        //     println!("adding luma");
+        //     self.cache_pixel(&mut curr_pixel);
+        //     self.writer.write_all(&luma)?;
+        //     return Ok(());
+        // }
 
         // RGB encoding
         println!("adding rgb");
@@ -183,6 +185,8 @@ impl<W: Write, const C: usize> Write for PixelEncoder<W, C> {
         self.writer.flush()?;
 
         if !self.buffer.is_empty() {
+            println!("buffer not empty");
+            println!("buffer: {:?}", self.buffer);
             Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 "buffer not empty",
