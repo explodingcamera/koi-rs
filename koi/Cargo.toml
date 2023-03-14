@@ -1,0 +1,13 @@
+[package]
+edition = "2021"
+name = "koi"
+version = "0.1.0"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+bson = "2.5"
+lz4_flex = "0.10"
+num_enum = "0.5.11"
+thiserror = "1.0"

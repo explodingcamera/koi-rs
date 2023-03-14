@@ -1,17 +1,6 @@
-[package]
-edition = "2021"
-name = "koi"
-version = "0.1.0"
+[workspace]
 
-[lib]
-path = "src/lib.rs"
-
-[[bin]]
-name = "koi"
-path = "src/bin.rs"
-
-[dependencies]
-bson = "2.5"
-lz4_flex = "0.10"
-num_enum = "0.5.11"
-thiserror = "1.0"
+members = [
+  "koi",
+  "koi-cli",
+]

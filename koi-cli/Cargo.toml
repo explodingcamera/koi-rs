@@ -1,0 +1,15 @@
+[package]
+edition = "2021"
+name = "koi-cli"
+version = "0.1.0"
+
+[lib]
+path = "lib.rs"
+
+[[bin]]
+name = "koi"
+path = "bin.rs"
+
+[dependencies]
+koi = {path = "../koi"}
+png = "0.17"
