@@ -9,6 +9,8 @@ pub enum Writer<W: Write> {
 
 impl<W: Write> Write for Writer<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        println!("Writer::write");
+        println!("buf: {:?}", buf);
         match self {
             Writer::Lz4Encoder(ref mut encoder) => encoder.write(buf),
             Writer::UncompressedEncoder(ref mut encoder) => encoder.write(buf),

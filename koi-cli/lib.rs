@@ -47,12 +47,14 @@ pub fn run() {
         (width * height) as usize,
     );
 
-    let mut buf = vec![0; (width * height * 3) as usize];
+    let mut buf = Vec::with_capacity((width * height * 4) as usize);
     decoder.decode(&mut buf).unwrap();
+    println!("{}", buf.len());
+    println!("{:?}", buf);
 
     let mut out = File::create("test.png").expect("Failed to create file");
     let mut encoder = png::Encoder::new(&mut out, width, height);
-    encoder.set_color(png::ColorType::Rgb);
+    encoder.set_color(png::ColorType::Rgba);
     encoder.set_depth(png::BitDepth::Eight);
     let mut writer = encoder.write_header().unwrap();
     writer.write_image_data(&buf).unwrap();

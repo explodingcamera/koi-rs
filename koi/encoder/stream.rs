@@ -113,6 +113,7 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
 
         // Diff encoding
         if let Some(diff) = color_diff(diff) {
+            println!("adding diff");
             self.cache_pixel(&mut curr_pixel);
             self.writer.write_all(&[diff])?;
             return Ok(());
@@ -120,12 +121,14 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
 
         // Luma encoding
         if let Some(luma) = luma_diff(diff) {
+            println!("adding luma");
             self.cache_pixel(&mut curr_pixel);
             self.writer.write_all(&luma)?;
             return Ok(());
         }
 
         // RGB encoding
+        println!("adding rgb");
         let RgbaColor([r, g, b, _]) = curr_pixel;
         self.cache_pixel(&mut curr_pixel);
         self.writer.write_all(&[Op::Rgb as u8, r, g, b])?;
