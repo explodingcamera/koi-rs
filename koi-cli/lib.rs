@@ -51,7 +51,7 @@ pub fn run() {
         koi::decoder::PixelDecoder::<_, CHANNELS>::new_lz4(&mut in_file, (width * height) as usize);
 
     let mut buf = Vec::with_capacity((width * height * (CHANNELS as u32)) as usize);
-    decoder.decode_buffered(&mut buf).unwrap();
+    decoder.decode(&mut buf).unwrap();
 
     let mut out = File::create("test.png").expect("Failed to create file");
     let mut encoder = png::Encoder::new(&mut out, width, height);

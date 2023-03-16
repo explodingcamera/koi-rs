@@ -6,7 +6,7 @@ use crate::{types::*, util::pixel_hash};
 
 pub struct PixelDecoder<R: Read, const C: usize> {
     read_decoder: Reader<R>,
-    cache: [RgbaColor; 64],
+    cache: [RgbaColor; CACHE_SIZE],
     last_px: RgbaColor,
     pixels_in: usize,    // pixels decoded so far
     pixels_count: usize, // total number of pixels in the image
@@ -16,7 +16,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
     pub fn new(data: Reader<R>, pixels_count: usize) -> Self {
         Self {
             read_decoder: data,
-            cache: [RgbaColor([0, 0, 0, 0]); 64],
+            cache: [RgbaColor([0, 0, 0, 0]); CACHE_SIZE],
             last_px: RgbaColor([0, 0, 0, 255]),
             pixels_in: 0,
             pixels_count,
