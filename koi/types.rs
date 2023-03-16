@@ -74,15 +74,15 @@ pub fn color_diff(diff: (u8, u8, u8)) -> Option<u8> {
     let b = diff.2.wrapping_add(2);
 
     match r | g | b {
-        0x00..=0x03 => Some(Op::Diff as u8 | (r << 4) as u8 | (g << 2) as u8 | b as u8),
+        0x00..=0x03 => Some(Op::Diff as u8 | (r << 4) | (g << 2) | b),
         _ => None,
     }
 }
 
 pub fn luma_diff(diff: (u8, u8, u8)) -> Option<[u8; 2]> {
     let r = diff.0.wrapping_add(8).wrapping_sub(diff.1);
-    let g = diff.0.wrapping_add(32);
-    let b = diff.0.wrapping_add(8).wrapping_sub(diff.1);
+    let g = diff.1.wrapping_add(32);
+    let b = diff.2.wrapping_add(8).wrapping_sub(diff.1);
 
     match (r | b, g) {
         (0x00..=0x0F, 0x00..=0x3F) => Some([Op::Luma as u8 | g, r << 4 | b]),

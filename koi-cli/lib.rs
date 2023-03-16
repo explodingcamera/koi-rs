@@ -1,13 +1,9 @@
 use std::{
-    fs::{self, File},
-    io::{BufReader, Read, Write},
+    fs::File,
+    io::{BufReader, Write},
 };
 
-use koi::{
-    encoder::PixelEncoder,
-    file::FileHeader,
-    types::{Channels, Compression},
-};
+use koi::{encoder::PixelEncoder, file::FileHeader, types::Compression};
 
 fn read_png(path: &str) -> (Vec<u8>, (u32, u32)) {
     let mut decoder = png::Decoder::new(File::open(path).unwrap());
@@ -20,11 +16,11 @@ fn read_png(path: &str) -> (Vec<u8>, (u32, u32)) {
     (buf, (info.width, info.height))
 }
 
-const channels: usize = 4;
-const file: &str = "koi-cli/tests/x.png";
+const CHANNELS: usize = 3;
+const FILE: &str = "koi-cli/tests/PNG_Test.png";
 
 pub fn run() {
-    let (test_image, (width, height)) = read_png(file);
+    let (test_image, (width, height)) = read_png(FILE);
     let mut out = File::create("test.koi").expect("Failed to create file");
 
     println!("{}", test_image.len());
@@ -33,16 +29,16 @@ pub fn run() {
         None,
         width,
         height,
-        (channels as u8).try_into().unwrap(),
+        (CHANNELS as u8).try_into().unwrap(),
         Compression::None,
     );
     header.write(&mut out).expect("Failed to write header");
 
-    let mut encoder =
-        PixelEncoder::<_, channels>::new_uncompressed(&mut out, (width * height) as usize);
+    let mut encoder = PixelEncoder::<_, CHANNELS>::new_lz4(&mut out, (width * height) as usize);
     encoder
         .encode(&*test_image)
         .expect("Failed to encode image");
+
     encoder.flush().expect("Failed to flush encoder");
 
     let in_file = File::open("test.koi").expect("Failed to open file");
@@ -51,20 +47,16 @@ pub fn run() {
     let header = FileHeader::read(&mut in_file).unwrap();
     println!("{:?}", header);
 
-    let mut decoder = koi::decoder::PixelDecoder::<_, channels>::new_uncompressed(
-        &mut in_file,
-        (width * height) as usize,
-    );
+    let mut decoder =
+        koi::decoder::PixelDecoder::<_, CHANNELS>::new_lz4(&mut in_file, (width * height) as usize);
 
-    let mut buf = Vec::with_capacity((width * height * (channels as u32)) as usize);
-    decoder.decode(&mut buf).unwrap();
-    println!("{}", buf.len());
-    println!("{:?}", buf);
+    let mut buf = Vec::with_capacity((width * height * (CHANNELS as u32)) as usize);
+    decoder.decode_buffered(&mut buf).unwrap();
 
     let mut out = File::create("test.png").expect("Failed to create file");
     let mut encoder = png::Encoder::new(&mut out, width, height);
 
-    if channels == 3 {
+    if CHANNELS == 3 {
         encoder.set_color(png::ColorType::Rgb);
     } else {
         encoder.set_color(png::ColorType::Rgba);

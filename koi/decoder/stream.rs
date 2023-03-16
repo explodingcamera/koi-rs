@@ -1,5 +1,5 @@
 use lz4_flex::frame::FrameDecoder;
-use std::io::{self, Read, Write};
+use std::io::{self, BufReader, Read, Write};
 
 use super::reader::Reader;
 use crate::{types::*, util::pixel_hash};
@@ -36,17 +36,22 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
         io::copy(self, &mut writer)
     }
 
+    // take a writer and decode the image into it using a buffered reader to improve performance for io heavy tasks
+    pub fn decode_buffered<W: Write>(&mut self, mut writer: W) -> std::io::Result<u64> {
+        io::copy(&mut BufReader::new(self), &mut writer)
+    }
+
     fn handle_end_of_image(&mut self) -> std::io::Result<()> {
         let mut padding = Vec::with_capacity(8);
         self.read_decoder.read_to_end(&mut padding)?;
 
-        // if padding != END_OF_IMAGE {
-        //     println!("padding: {:?}", padding);
-        //     return Err(std::io::Error::new(
-        //         std::io::ErrorKind::InvalidData,
-        //         "Invalid end of image",
-        //     ));
-        // }
+        if padding != END_OF_IMAGE {
+            println!("padding: {:?}", padding);
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid end of image",
+            ));
+        }
 
         Ok(())
     }
@@ -55,7 +60,6 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
 // implement read trait for Decoder
 impl<R: Read, const C: usize> Read for PixelDecoder<R, C> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        println!("read {}/{}", self.pixels_in, self.pixels_count);
         if self.pixels_in >= self.pixels_count {
             println!("end of image");
             println!("pixels in: {}", self.pixels_in);
@@ -68,7 +72,6 @@ impl<R: Read, const C: usize> Read for PixelDecoder<R, C> {
 
         match b1 {
             OP_INDEX..=OP_INDEX_END => {
-                println!("OP_INDEX");
                 self.last_px = self.cache[b1 as usize];
                 buf[..C].copy_from_slice(&self.last_px.0[..C]);
                 self.pixels_in += 1;
@@ -76,7 +79,6 @@ impl<R: Read, const C: usize> Read for PixelDecoder<R, C> {
             }
             OP_RUNLENGTH..=OP_RUNLENGTH_END => {
                 let run = ((b1 & 0x3f) as usize).min(self.pixels_count - self.pixels_in);
-                println!("OP_RUNLENGTH: {}", run);
                 for i in 0..run {
                     buf[i * C..(i + 1) * C].copy_from_slice(&self.last_px.0[..C]);
                 }
@@ -84,19 +86,15 @@ impl<R: Read, const C: usize> Read for PixelDecoder<R, C> {
                 return Ok(run * C);
             }
             OP_RGB => {
-                println!("OP_RGB");
                 pixel.0[..3].copy_from_slice(&self.read_decoder.read::<3>()?);
             }
             OP_RGBA if C >= Channels::Rgba as u8 as usize => {
-                println!("OP_RGBA");
                 pixel.0[..4].copy_from_slice(&self.read_decoder.read::<4>()?);
             }
             OP_DIFF..=OP_DIFF_END => {
-                println!("OP_DIFF");
                 pixel = self.last_px.apply_diff(b1);
             }
             OP_LUMA..=OP_LUMA_END => {
-                println!("OP_LUMA");
                 let b2 = self.read_decoder.read::<1>()?[0];
                 pixel = self.last_px.apply_luma(b1, b2);
             }
