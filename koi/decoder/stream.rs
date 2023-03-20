@@ -44,8 +44,8 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
     fn handle_end_of_image(&mut self) -> std::io::Result<()> {
         let mut padding = Vec::with_capacity(8);
         self.read_decoder.read_to_end(&mut padding)?;
-
-        if padding != END_OF_IMAGE {
+        // last 8 bytes should be END_OF_IMAGE
+        if padding[padding.len() - 8..] != END_OF_IMAGE {
             println!("padding: {:?}", padding);
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -77,19 +77,23 @@ impl<R: Read, const C: usize> Read for PixelDecoder<R, C> {
                 self.pixels_in += 1;
                 return Ok(C);
             }
-            OP_RUNLENGTH..=OP_RUNLENGTH_END => {
-                let run = ((b1 & 0x3f) as usize).min(self.pixels_count - self.pixels_in);
-                for i in 0..run {
-                    buf[i * C..(i + 1) * C].copy_from_slice(&self.last_px.0[..C]);
-                }
-                self.pixels_in += run;
-                return Ok(run * C);
+            OP_GRAY => {
+                let b2 = self.read_decoder.read::<1>()?[0];
+                pixel.0[..3].copy_from_slice(&[b2, b2, b2]);
+            }
+            OP_GRAY_ALPHA => {
+                let b2 = self.read_decoder.read::<1>()?[0];
+                let b3 = self.read_decoder.read::<1>()?[0];
+                pixel.0[..4].copy_from_slice(&[b2, b2, b2, b3]);
             }
             OP_RGB => {
                 pixel.0[..3].copy_from_slice(&self.read_decoder.read::<3>()?);
             }
             OP_RGBA if C >= Channels::Rgba as u8 as usize => {
                 pixel.0[..4].copy_from_slice(&self.read_decoder.read::<4>()?);
+            }
+            OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END => {
+                pixel = self.last_px.apply_alpha_diff(b1);
             }
             OP_DIFF..=OP_DIFF_END => {
                 pixel = self.last_px.apply_diff(b1);

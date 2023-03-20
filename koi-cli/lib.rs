@@ -16,8 +16,8 @@ fn read_png(path: &str) -> (Vec<u8>, (u32, u32)) {
     (buf, (info.width, info.height))
 }
 
-const CHANNELS: usize = 3;
-const FILE: &str = "koi-cli/tests/PNG_Test.png";
+const CHANNELS: usize = 4;
+const FILE: &str = "koi-cli/tests/bw-transparent.png";
 
 pub fn run() {
     let (test_image, (width, height)) = read_png(FILE);
@@ -66,10 +66,4 @@ pub fn run() {
     let mut writer = encoder.write_header().unwrap();
     writer.write_image_data(&buf).unwrap();
     writer.finish().unwrap();
-
-    // let reader = &mut bytes.as_slice();
-    // let mut buffer = BufReader::new(reader);
-
-    // let mut buf = Vec::new();
-    // buffer.read_to_end(&mut buf).unwrap();
 }

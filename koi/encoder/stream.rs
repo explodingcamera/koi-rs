@@ -66,28 +66,6 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         self.pixels_in += 1;
         let mut curr_pixel = curr_pixel;
 
-        // // runlength encode
-        // currently broken
-        // if curr_pixel == prev_pixel {
-        //     if self.runlength == (CACHE_SIZE as u8 - 3) || self.pixels_in < self.pixels_count {
-        //         let res = self.encode_runlength(curr_pixel);
-        //         self.cache_pixel(&mut curr_pixel);
-        //         self.writer.write_one(res)?;
-        //         return Ok(());
-        //     }
-
-        //     self.runlength += 1;
-        //     return Ok(());
-        // }
-        // // previous pixel was not the same or we reached the end of the image so we need to encode the runlength
-        // if self.runlength > 0 {
-        //     println!("adding runlength: {}", self.runlength);
-        //     let res = self.encode_runlength(curr_pixel);
-        //     self.cache_pixel(&mut curr_pixel);
-        //     self.writer.write_one(res)?;
-        //     return Ok(());
-        // }
-
         // index encoding
         let hash = pixel_hash(curr_pixel);
         if self.cache[hash as usize] == curr_pixel {
@@ -96,12 +74,30 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
             return Ok(());
         }
 
-        // RGBA encoding (whenever alpha channel changes)
-        if C > Channels::Rgb as u8 as usize && curr_pixel.0[3] != prev_pixel.0[3] {
-            self.cache_pixel(&mut curr_pixel);
-            self.writer.write_one(Op::Rgba as u8)?;
-            self.writer.write_all(&curr_pixel.0)?;
-            return Ok(());
+        // alpha diff encoding (whenever only alpha channel changes)
+        if curr_pixel.0[..3] == prev_pixel.0[..3] && curr_pixel.0[3] != prev_pixel.0[3] {
+            if let Some(diff) = prev_pixel.alpha_diff(&curr_pixel) {
+                self.cache_pixel(&mut curr_pixel);
+                self.writer.write_one(diff)?;
+                return Ok(());
+            }
+        }
+
+        let is_gray = curr_pixel.is_gray();
+        if curr_pixel.0[3] != prev_pixel.0[3] && curr_pixel.0[3] != 255 {
+            if is_gray {
+                // Gray Alpha encoding (whenever alpha channel changes and pixel is gray)
+                self.cache_pixel(&mut curr_pixel);
+                self.writer.write_one(Op::GrayAlpha as u8)?;
+                self.writer.write_all(&[curr_pixel.0[0], curr_pixel.0[3]])?;
+                return Ok(());
+            } else {
+                // RGBA encoding (whenever alpha channel changes)
+                self.cache_pixel(&mut curr_pixel);
+                self.writer.write_one(Op::Rgba as u8)?;
+                self.writer.write_all(&curr_pixel.0)?;
+                return Ok(());
+            }
         }
 
         // Difference between current and previous pixel
@@ -119,6 +115,17 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
             self.cache_pixel(&mut curr_pixel);
             self.writer.write_all(&luma)?;
             return Ok(());
+        }
+
+        if is_gray {
+            // Gray encoding
+            let RgbaColor([r, g, b, _]) = curr_pixel;
+            if r == g && g == b {
+                self.cache_pixel(&mut curr_pixel);
+                self.writer.write_one(Op::Gray as u8)?;
+                self.writer.write_one(curr_pixel.0[0])?;
+                return Ok(());
+            }
         }
 
         // RGB encoding

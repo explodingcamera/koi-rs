@@ -8,7 +8,7 @@ use bson::{Binary, Document};
 
 #[derive(Debug)]
 pub struct FileHeader {
-    pub version: u32,             // f
+    pub version: u32,             // v
     pub exif: Option<Vec<u8>>,    // e
     pub width: u32,               // w
     pub height: u32,              // h
@@ -43,7 +43,7 @@ impl FileHeader {
     }
 
     pub fn write(&self, writer: &mut dyn Write) -> Result<(), QoirEncodeError> {
-        writer.write_all(MAGIC)?;
+        writer.write_all(&MAGIC)?;
 
         let mut doc = Document::new();
         doc.insert("v", self.version as i32);
