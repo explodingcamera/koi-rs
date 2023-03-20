@@ -3,7 +3,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 // magic number to identify koi files
 pub const MAGIC: [u8; 8] = *b"KOI \xF0\x9F\x99\x82";
 pub const MASK: u8 = 0xC0;
-pub const CACHE_SIZE: usize = 62; // -2 seems to give better compression on average than 64
+pub const CACHE_SIZE: usize = 62; // -2 seems to give better compression on average than 64 with our current hash function
 pub const END_OF_IMAGE: [u8; 8] = *b"\x00\x00\x00\x00\xF0\x9F\x99\x82";
 
 pub const OP_INDEX: u8 = 0x00;
@@ -14,13 +14,8 @@ pub const OP_LUMA: u8 = 0x80;
 pub const OP_LUMA_END: u8 = 0x80 | 0x3F;
 pub const OP_DIFF_ALPHA: u8 = 0xC0;
 pub const OP_DIFF_ALPHA_END: u8 = 0xC0 | 0x3b; // we only have 59 possible values for diff alpha so we can use the color opcodes
-
-// pub const OP_RUNLENGTH: u8 = 0xC0;
-// pub const OP_RUNLENGTH_END: u8 = 0xfb;
-
 pub const OP_GRAY: u8 = 0xfc;
 pub const OP_GRAY_ALPHA: u8 = 0xfd;
-
 pub const OP_RGB: u8 = 0xfe;
 pub const OP_RGBA: u8 = 0xff;
 
@@ -30,7 +25,6 @@ pub enum Op {
     Index = OP_INDEX,
     Diff = OP_DIFF,
     Luma = OP_LUMA,
-    // Run = OP_RUNLENGTH,
     DiffAlpha = OP_DIFF_ALPHA,
     Gray = OP_GRAY,
     GrayAlpha = OP_GRAY_ALPHA,

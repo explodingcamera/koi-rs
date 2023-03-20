@@ -6,7 +6,7 @@ use crate::{
 };
 use bson::{Binary, Document};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FileHeader {
     pub version: u32,             // v
     pub exif: Option<Vec<u8>>,    // e
@@ -42,7 +42,7 @@ impl FileHeader {
         }
     }
 
-    pub fn write(&self, writer: &mut dyn Write) -> Result<(), QoirEncodeError> {
+    pub fn write<W: Write>(&self, writer: &mut W) -> Result<(), QoirEncodeError> {
         writer.write_all(&MAGIC)?;
 
         let mut doc = Document::new();

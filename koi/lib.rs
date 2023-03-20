@@ -1,3 +1,6 @@
+use std::io::Write;
+
+use file::FileHeader;
 use thiserror::Error;
 
 use lz4_flex::block::CompressError as Lz4CompressError;
@@ -10,6 +13,39 @@ pub mod file;
 pub mod types;
 pub mod util;
 pub fn run() {}
+
+pub fn encode<WRITER: std::io::Write, READER: std::io::Read, const CHANNELS: usize>(
+    header: file::FileHeader,
+    reader: READER, // unbuffered reader, if you want to use a buffered reader (e.g. when reading a file), wrap it in a BufReader
+    mut writer: WRITER,
+) -> Result<(), QoirEncodeError> {
+    header.write(&mut writer)?;
+
+    let mut encoder = encoder::PixelEncoder::<WRITER, CHANNELS>::new_lz4(
+        writer,
+        (header.width * header.height) as usize,
+    );
+
+    encoder.encode(reader)?;
+    encoder.flush()?;
+
+    Ok(())
+}
+
+pub fn decode<WRITER: std::io::Write, READER: std::io::Read, const CHANNELS: usize>(
+    mut reader: READER,
+    mut writer: WRITER,
+) -> Result<FileHeader, QoirDecodeError> {
+    let header = file::FileHeader::read(&mut reader)?;
+
+    let mut decoder = decoder::PixelDecoder::<READER, CHANNELS>::new_lz4(
+        reader,
+        (header.width * header.height) as usize,
+    );
+
+    decoder.decode(&mut writer)?;
+    Ok(header)
+}
 
 #[derive(Error, Debug)]
 pub enum QoirDecodeError {
