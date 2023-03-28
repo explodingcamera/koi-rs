@@ -35,6 +35,14 @@ pub enum Op {
 pub struct RgbaColor(pub [u8; 4]);
 
 impl RgbaColor {
+    pub fn from_rgb([r, g, b]: [u8; 3]) -> Self {
+        RgbaColor([r, g, b, 0xff])
+    }
+
+    pub fn from_grayscale(gray: u8) -> Self {
+        RgbaColor([gray, gray, gray, 0xff])
+    }
+
     pub fn is_gray(&self) -> bool {
         let RgbaColor([r, g, b, _]) = self;
         r == g && g == b

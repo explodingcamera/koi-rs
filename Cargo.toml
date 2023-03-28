@@ -5,3 +5,7 @@ members = [
   "koi-cli",
   "koi-bench",
 ]
+
+[profile.release]
+debug = true
+opt-level = 3

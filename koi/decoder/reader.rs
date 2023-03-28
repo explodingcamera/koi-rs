@@ -17,7 +17,7 @@ impl<R: Read> Read for Reader<R> {
 }
 
 impl<R: Read> Reader<R> {
-    pub fn read<const N: usize>(&mut self) -> std::io::Result<[u8; N]> {
+    pub fn read_bytes<const N: usize>(&mut self) -> std::io::Result<[u8; N]> {
         let mut buf = [0; N];
         self.read_exact(&mut buf)?;
         Ok(buf)
