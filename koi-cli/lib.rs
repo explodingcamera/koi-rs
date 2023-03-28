@@ -2,7 +2,10 @@ use koi::{decode, encode, file::FileHeader, types::Compression};
 use std::{fs::File, io::BufReader};
 
 fn read_png(path: &str) -> (Vec<u8>, (u32, u32)) {
-    let mut decoder = png::Decoder::new(File::open(path).unwrap());
+    let data = File::open(path).unwrap();
+    let mut options = png::DecodeOptions::default();
+    options.set_ignore_crc(true);
+    let mut decoder = png::Decoder::new_with_options(data, options);
     decoder.set_transformations(png::Transformations::EXPAND);
     let mut reader = decoder.read_info().unwrap();
     let mut buf = vec![0; reader.output_buffer_size()];
@@ -12,14 +15,12 @@ fn read_png(path: &str) -> (Vec<u8>, (u32, u32)) {
     (buf, (info.width, info.height))
 }
 
-const CHANNELS: usize = 4;
-const FILE: &str = "koi-cli/tests/bw-transparent.png";
+const CHANNELS: usize = 3;
+const FILE: &str = "her_floor_1.png";
 
 pub fn run() {
     let (test_image, (width, height)) = read_png(FILE);
     let mut out = File::create("test.koi").expect("Failed to create file");
-
-    println!("{}", test_image.len());
 
     let header = FileHeader::new(
         None,

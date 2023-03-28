@@ -18,7 +18,7 @@ pub struct PixelEncoder<W: Write, const C: usize> {
     cache: [RgbaColor; CACHE_SIZE],
     prev_pixel: RgbaColor,
 
-    buffer: Vec<u8>,
+    remainder: Vec<u8>,
 }
 
 impl<W: Write, const C: usize> PixelEncoder<W, C> {
@@ -31,7 +31,7 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
             pixels_count,
             prev_pixel: RgbaColor([0, 0, 0, 0]),
 
-            buffer: Vec::with_capacity(8),
+            remainder: Vec::with_capacity(8),
         }
     }
 
@@ -150,38 +150,59 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
     pub fn encode<R: Read>(&mut self, mut reader: R) -> std::io::Result<u64> {
         io::copy(&mut reader, self)
     }
+
+    fn write_aligned(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        for chunk in buf.chunks_exact(C) {
+            let mut curr_pixel = RgbaColor([0, 0, 0, 255]);
+            curr_pixel.0[..C].copy_from_slice(chunk);
+            self.encode_pixel(curr_pixel, self.prev_pixel)?;
+            self.prev_pixel = curr_pixel;
+            // we've reached the end of the buffer and don't have enough bytes to fill a pixel
+        }
+
+        if buf.len() % C != 0 {
+            // save the remainder for the next write
+            self.remainder = buf[buf.len() - (buf.len() % C)..].to_vec();
+        }
+
+        Ok(())
+    }
 }
 
 impl<W: Write, const C: usize> Write for PixelEncoder<W, C> {
     // Currently always buffers C bytes before encoding a pixel, this could be improved by only buffering the remaining bytes until the next pixel boundary is reached
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let buf_len = buf.len();
-        // let mut total_bytes_written = 0;
+        // println!("buf.len(): {}", buf.len());
 
-        for byte in buf {
-            self.buffer.push(*byte);
-            if self.buffer.len() == C {
-                let mut curr_pixel = RgbaColor([0, 0, 0, 255]);
-                curr_pixel.0[..C].copy_from_slice(&self.buffer);
-                self.encode_pixel(curr_pixel, self.prev_pixel)?;
-                self.prev_pixel = curr_pixel;
-                self.buffer.clear();
-                // total_bytes_written += C;
-            }
-        }
+        // append the remainder from the previous write to the beginning of the buffer
+        if !self.remainder.is_empty() {
+            let mut new_buf = self.remainder.clone();
+            new_buf.extend_from_slice(buf);
+            self.remainder.clear();
+            self.write_aligned(&new_buf)?;
+        } else {
+            self.write_aligned(buf)?
+        };
+
+        // println!(
+        //     "pixels_in: {}, pixels_count: {}",
+        //     self.pixels_in, self.pixels_count
+        // );
 
         if self.pixels_in == self.pixels_count {
+            // println!("writing end of image marker");
             self.finish()?;
         }
 
-        Ok(buf_len)
+        Ok(buf.len())
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
         self.writer.flush()?;
 
-        if !self.buffer.is_empty() {
-            println!("buffer not empty, are the amount of channels correct?");
+        if !self.remainder.is_empty() {
+            println!("remainder buffer not empty, are the amount of channels correct?");
+            println!("remainder: {:?}", self.remainder);
             Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 "buffer not empty",

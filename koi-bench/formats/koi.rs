@@ -1,24 +1,21 @@
+use std::io::Result;
+
 use koi::{file::FileHeader, types::Compression};
 
 use super::ImageFormat;
 
 #[derive(Debug)]
-pub struct Koi {}
+pub struct Koi<const C: usize> {}
 
-impl Koi {
+impl<const C: usize> Koi<C> {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl ImageFormat for Koi {
-    fn encode<const C: usize>(
-        &mut self,
-        data: &[u8],
-        out: &mut [u8],
-        dimensions: (u32, u32),
-    ) -> Result<(), ()> {
-        koi::encode::<_, _, C>(
+impl<const C: usize> ImageFormat for Koi<C> {
+    fn encode(&mut self, data: &[u8], out: &mut [u8], dimensions: (u32, u32)) -> Result<()> {
+        Ok(koi::encode::<_, _, C>(
             FileHeader::new(
                 None,
                 dimensions.0,
@@ -29,18 +26,10 @@ impl ImageFormat for Koi {
             data,
             out,
         )
-        .map(|_| ())
-        .map_err(|_| ())
+        .map(|_| ())?)
     }
 
-    fn decode<const C: usize>(
-        &mut self,
-        data: &[u8],
-        out: &mut [u8],
-        dimensions: (u32, u32),
-    ) -> Result<(), ()> {
-        koi::decode::<_, _, C>(data, out)
-            .map(|_| ())
-            .map_err(|_| ())
+    fn decode(&mut self, data: &[u8], out: &mut [u8], _dimensions: (u32, u32)) -> Result<()> {
+        Ok(koi::decode::<_, _, C>(data, out).map(|_| ())?)
     }
 }

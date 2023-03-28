@@ -42,10 +42,10 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
     }
 
     fn handle_end_of_image(&mut self) -> std::io::Result<()> {
-        let mut padding = Vec::with_capacity(8);
-        self.read_decoder.read_to_end(&mut padding)?;
+        let padding = self.read_decoder.read::<8>()?;
+
         // last 8 bytes should be END_OF_IMAGE
-        if padding[padding.len() - 8..] != END_OF_IMAGE {
+        if padding[0..] != END_OF_IMAGE {
             println!("padding: {:?}", padding);
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -55,66 +55,87 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
 
         Ok(())
     }
-}
 
-// implement read trait for Decoder
-impl<R: Read, const C: usize> Read for PixelDecoder<R, C> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+    fn read_pixels(&mut self, buf: &mut [u8], count: usize) -> std::io::Result<usize> {
+        let mut pixels_read = 0;
+
         if self.pixels_in >= self.pixels_count {
-            println!("end of image");
-            println!("pixels in: {}", self.pixels_in);
+            // println!("end of image");
+            // println!("pixels in: {}", self.pixels_in);
             self.handle_end_of_image()?;
             return Ok(0);
         }
 
-        let [b1] = self.read_decoder.read::<1>()?;
-        let mut pixel = RgbaColor([0, 0, 0, 255]);
+        for i in 0..count {
+            if self.pixels_in >= self.pixels_count {
+                // println!("end of image, break");
+                // println!("pixels in: {}", self.pixels_in);
+                break;
+            }
 
-        match b1 {
-            OP_INDEX..=OP_INDEX_END => {
-                self.last_px = self.cache[b1 as usize];
-                buf[..C].copy_from_slice(&self.last_px.0[..C]);
-                self.pixels_in += 1;
-                return Ok(C);
-            }
-            OP_GRAY => {
-                let b2 = self.read_decoder.read::<1>()?[0];
-                pixel.0[..3].copy_from_slice(&[b2, b2, b2]);
-            }
-            OP_GRAY_ALPHA => {
-                let b2 = self.read_decoder.read::<1>()?[0];
-                let b3 = self.read_decoder.read::<1>()?[0];
-                pixel.0[..4].copy_from_slice(&[b2, b2, b2, b3]);
-            }
-            OP_RGB => {
-                pixel.0[..3].copy_from_slice(&self.read_decoder.read::<3>()?);
-            }
-            OP_RGBA if C >= Channels::Rgba as u8 as usize => {
-                pixel.0[..4].copy_from_slice(&self.read_decoder.read::<4>()?);
-            }
-            OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END => {
-                pixel = self.last_px.apply_alpha_diff(b1);
-            }
-            OP_DIFF..=OP_DIFF_END => {
-                pixel = self.last_px.apply_diff(b1);
-            }
-            OP_LUMA..=OP_LUMA_END => {
-                let b2 = self.read_decoder.read::<1>()?[0];
-                pixel = self.last_px.apply_luma(b1, b2);
-            }
-            _ => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Invalid opcode",
-                ));
-            }
-        };
+            let [b1] = self.read_decoder.read::<1>()?;
+            let mut pixel = RgbaColor([0, 0, 0, 255]);
+            let buffer_offset = i * C;
 
-        buf[..C].copy_from_slice(&pixel.0[..C]);
-        self.pixels_in += 1;
-        self.last_px = pixel;
-        self.cache[pixel_hash(pixel) as usize] = pixel;
+            match b1 {
+                OP_INDEX..=OP_INDEX_END => {
+                    self.last_px = self.cache[b1 as usize];
+                    buf[buffer_offset..buffer_offset + C].copy_from_slice(&self.last_px.0[..C]);
+                    self.pixels_in += 1;
+                    return Ok((pixels_read + 1) * C);
+                }
+                OP_GRAY => {
+                    let b2 = self.read_decoder.read::<1>()?[0];
+                    pixel.0[..3].copy_from_slice(&[b2, b2, b2]);
+                }
+                OP_GRAY_ALPHA => {
+                    let b2 = self.read_decoder.read::<1>()?[0];
+                    let b3 = self.read_decoder.read::<1>()?[0];
+                    pixel.0[..4].copy_from_slice(&[b2, b2, b2, b3]);
+                }
+                OP_RGB => {
+                    pixel.0[..3].copy_from_slice(&self.read_decoder.read::<3>()?);
+                }
+                OP_RGBA if C >= Channels::Rgba as u8 as usize => {
+                    pixel.0[..4].copy_from_slice(&self.read_decoder.read::<4>()?);
+                }
+                OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END => {
+                    pixel = self.last_px.apply_alpha_diff(b1);
+                }
+                OP_DIFF..=OP_DIFF_END => {
+                    pixel = self.last_px.apply_diff(b1);
+                }
+                OP_LUMA..=OP_LUMA_END => {
+                    let b2 = self.read_decoder.read::<1>()?[0];
+                    pixel = self.last_px.apply_luma(b1, b2);
+                }
+                _ => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Invalid opcode",
+                    ));
+                }
+            };
 
-        Ok(C)
+            buf[buffer_offset..buffer_offset + C].copy_from_slice(&pixel.0[..C]);
+            self.pixels_in += 1;
+            self.last_px = pixel;
+            self.cache[pixel_hash(pixel) as usize] = pixel;
+            pixels_read += 1;
+        }
+
+        Ok(pixels_read * C)
+    }
+}
+
+// implement read trait for Decoder
+impl<R: Read, const C: usize> Read for PixelDecoder<R, C> {
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        self.read_pixels(buf, self.pixels_count)
+    }
+
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let count = buf.len() / C;
+        self.read_pixels(buf, count)
     }
 }

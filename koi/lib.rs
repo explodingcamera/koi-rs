@@ -76,3 +76,21 @@ pub enum QoirEncodeError {
     #[error(transparent)]
     Lz4Compress(#[from] Lz4CompressError),
 }
+
+impl From<QoirEncodeError> for std::io::Error {
+    fn from(err: QoirEncodeError) -> Self {
+        match err {
+            QoirEncodeError::Io(err) => err,
+            _ => std::io::Error::new(std::io::ErrorKind::Other, err),
+        }
+    }
+}
+
+impl From<QoirDecodeError> for std::io::Error {
+    fn from(err: QoirDecodeError) -> Self {
+        match err {
+            QoirDecodeError::Io(err) => err,
+            _ => std::io::Error::new(std::io::ErrorKind::Other, err),
+        }
+    }
+}
