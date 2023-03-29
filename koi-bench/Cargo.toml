@@ -8,13 +8,10 @@ name = "koi-bench"
 path = "bin.rs"
 
 [dependencies]
+indicatif = "0.17"
 koi = {path = "../koi"}
 png = "0.17.8-rc"
 strum = "0.24"
 strum_macros = "0.24"
 walkdir = "2.3"
 webp = "0.2.2"
-
-[target.x86_64-unknown-linux-gnu]
-linker = "/usr/bin/clang"
-rustflags = ["-Clink-arg=-fuse-ld=lld", "-Clink-arg=-Wl,--no-rosegment"]

@@ -4,7 +4,7 @@ use std::io::{self, BufReader, Read, Write};
 use super::reader::Reader;
 use crate::{
     types::*,
-    util::{cold, likely, pixel_hash, unlikely},
+    util::{pixel_hash, unlikely},
 };
 
 pub struct PixelDecoder<R: Read, const C: usize> {
@@ -44,6 +44,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
         io::copy(&mut BufReader::new(self), &mut writer)
     }
 
+    #[allow(dead_code)]
     fn handle_end_of_image(&mut self) -> std::io::Result<()> {
         let mut padding = [0; 8];
         self.read_decoder.read_exact(&mut padding)?;
@@ -60,6 +61,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
         Ok(())
     }
 
+    #[allow(dead_code)]
     #[inline]
     fn decode_pixels(&mut self, buf: &mut [u8], count: usize) -> std::io::Result<usize> {
         let mut pixels_read = 0;
@@ -84,13 +86,25 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
                     pixels_read += 1;
                     continue;
                 }
-                OP_GRAY => RgbaColor::from_grayscale(self.read_decoder.read_bytes::<1>()?[0]),
+                OP_GRAY => {
+                    let [b2] = self.read_decoder.read_bytes::<1>()?;
+                    RgbaColor::from_grayscale(b2)
+                }
                 OP_GRAY_ALPHA => {
                     let [b2, b3] = self.read_decoder.read_bytes::<2>()?;
                     RgbaColor([b2, b2, b2, b3])
                 }
-                OP_RGB => RgbaColor::from_rgb(self.read_decoder.read_bytes::<3>()?),
-                OP_RGBA if likely(C >= Channels::Rgba as u8 as usize) => {
+                OP_RGB => {
+                    let [b2, b3, b4] = self.read_decoder.read_bytes::<3>()?;
+                    RgbaColor::from_rgb([b2, b3, b4])
+                }
+                OP_RGBA => {
+                    if unlikely(C < Channels::Rgba as u8 as usize) {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("Invalid opcode RGBA for {} channels", C),
+                        ));
+                    }
                     RgbaColor(self.read_decoder.read_bytes::<4>()?)
                 }
                 OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END => self.last_px.apply_alpha_diff(b1),
@@ -98,13 +112,6 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
                 OP_LUMA..=OP_LUMA_END => {
                     let [b2] = self.read_decoder.read_bytes::<1>()?;
                     self.last_px.apply_luma(b1, b2)
-                }
-                _ => {
-                    cold();
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "Invalid opcode",
-                    ));
                 }
             };
 
@@ -124,7 +131,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
 
         let mut buffer = vec![0u8; buf.len() / 4]; // max possible compression ratio is 4:1 (without factoring in lz4 compression on top of that)
         let mut buffer_pos = 0;
-        let buffer_len = self.read_decoder.read(&mut buffer)?;
+        let mut buffer_len = self.read_decoder.read(&mut buffer)?;
 
         if buffer_len == 0 || self.pixels_in >= self.pixels_count {
             return Ok(0);
@@ -138,7 +145,6 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
             self.read_decoder.read_to_end(&mut bytes)?;
 
             if bytes.len() < END_OF_IMAGE.len() {
-                println!("bytes: {:?}", bytes);
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     "Invalid end of image",
@@ -179,20 +185,19 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
             if unlikely(required_bytes > available_bytes) {
                 buffer_empty = true;
                 // copy current byte and remaining bytes to the start of the buffer
-                buffer.copy_within(buffer_pos..buffer_len, 0);
+                // buffer.copy_within(buffer_pos..buffer_len, 0);
+
+                // read "required_bytes" bytes from read_decoder
+                let mut new_bytes = [0u8; 4];
+                let read_count = required_bytes - available_bytes;
+                self.read_decoder.read_exact(&mut new_bytes[..read_count])?;
+
+                // set buffer to current_bytes + new_bytes
+                buffer = buffer[buffer_pos..].to_vec();
+                buffer.extend_from_slice(&new_bytes[..read_count]);
+
+                buffer_len = buffer.len();
                 buffer_pos = 0;
-
-                // read the required bytes into the buffer after the bytes we just copied to the start
-                let read = self
-                    .read_decoder
-                    .read(&mut buffer[available_bytes..required_bytes])?;
-
-                if read == 0 {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::UnexpectedEof,
-                        "Unexpected end of file",
-                    ));
-                }
             }
 
             let pixel = match b1 {
@@ -220,24 +225,20 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
                     RgbaColor([r, g, b, 255])
                 }
                 OP_RGBA => {
-                    if likely(C < Channels::Rgba as u8 as usize) {
+                    if unlikely(C < Channels::Rgba as u8 as usize) {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
                             format!("Invalid opcode RGBA for {} channels", C),
                         ));
                     }
-                    let r = buffer[buffer_pos + 1];
-                    let g = buffer[buffer_pos + 2];
-                    let b = buffer[buffer_pos + 3];
-                    let a = buffer[buffer_pos + 4];
-                    RgbaColor([r, g, b, a])
+                    RgbaColor(buffer[buffer_pos + 1..buffer_pos + 5].try_into().unwrap())
                 }
+                OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END => self.last_px.apply_alpha_diff(b1),
+                OP_DIFF..=OP_DIFF_END => self.last_px.apply_diff(b1),
                 OP_LUMA..=OP_LUMA_END => {
                     let b2 = buffer[buffer_pos + 1];
                     self.last_px.apply_luma(b1, b2)
                 }
-                OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END => self.last_px.apply_alpha_diff(b1),
-                OP_DIFF..=OP_DIFF_END => self.last_px.apply_diff(b1),
             };
 
             buf[buffer_offset..buffer_offset + C].copy_from_slice(&pixel.0[..C]);

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{ BTreeMap};
 use walkdir::WalkDir;
 
 use crate::{formats::ImageFormatType, util::to_dir};
@@ -14,7 +14,7 @@ pub struct FormatResult {
 pub struct Test {
     pub name: String,
     pub input_size: usize,
-    pub results: HashMap<ImageFormatType, FormatResult>,
+    pub results: BTreeMap<ImageFormatType, FormatResult>,
     pub errored: bool,
 }
 
@@ -25,10 +25,10 @@ pub struct TestSuite {
     pub tests: Vec<Test>,
 }
 
-pub fn generate_test_suites(path: &str) -> HashMap<String, TestSuite>  {
-  let mut suites: HashMap<String, TestSuite> = HashMap::new();
+pub fn generate_test_suites(path: &str) -> BTreeMap<String, TestSuite>  {
+  let mut suites: BTreeMap<String, TestSuite> = BTreeMap::new();
 
-  for entry in WalkDir::new(path) {
+  for entry in WalkDir::new(path).sort_by_file_name() {
       let Ok(entry) = entry else {
           continue; 
       };

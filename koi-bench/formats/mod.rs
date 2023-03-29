@@ -1,13 +1,15 @@
 pub mod koi;
 pub mod png;
+pub mod pngfast;
 pub mod qoi;
 pub mod webp;
 
 use strum_macros::{Display, EnumIter};
 
-#[derive(Debug, Display, EnumIter, PartialEq, Eq, Hash)]
+#[derive(Debug, Display, EnumIter, PartialEq, Eq, Hash, Ord, PartialOrd, Clone, Copy)]
 pub enum ImageFormatType {
     Png,
+    PngFast,
     Koi,
     // QOI,
     // WEBP,
@@ -19,6 +21,7 @@ impl ImageFormatType {
     ) -> Box<dyn ImageFormat<W, R>> {
         match self {
             ImageFormatType::Png => Box::new(png::Png::<C>::new()),
+            ImageFormatType::PngFast => Box::new(pngfast::PngFast::<C>::new()),
             ImageFormatType::Koi => Box::new(koi::Koi::<C>::new()),
             // ImageFormatType::QOI => Box::new(qoi::Qoi::<C>::new()),
             // ImageFormatType::WEBP => Box::new(webp::Webp::<C>::new()),

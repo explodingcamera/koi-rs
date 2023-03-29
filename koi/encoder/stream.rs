@@ -80,7 +80,7 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         // index encoding
         let hash = pixel_hash(curr_pixel);
         if self.cache[hash as usize] == curr_pixel {
-            self.cache_pixel(&mut curr_pixel, hash);
+            // self.cache_pixel(&mut curr_pixel, hash);
             self.writer.write_one(u8::from(Op::Index) | hash)?;
             return Ok(());
         }
@@ -124,12 +124,12 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
             return Ok(());
         }
 
-        // Luma encoding (broken on fast_decode)
-        // if let Some(luma) = luma_diff(diff) {
-        //     self.cache_pixel(&mut curr_pixel, hash);
-        //     self.writer.write_all(&luma)?;
-        //     return Ok(());
-        // }
+        // Luma encoding (broken on fast_decode) TODO: fix
+        if let Some(luma) = luma_diff(diff) {
+            self.cache_pixel(&mut curr_pixel, hash);
+            self.writer.write_all(&luma)?;
+            return Ok(());
+        }
 
         if is_gray {
             // Gray encoding

@@ -3,7 +3,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 // magic number to identify koi files
 pub const MAGIC: [u8; 8] = *b"KOI \xF0\x9F\x99\x82";
 pub const MASK: u8 = 0xC0;
-pub const CACHE_SIZE: usize = 64;
+pub const CACHE_SIZE: usize = 63;
 pub const END_OF_IMAGE: [u8; 8] = *b"\x00\x00\x00\x00\xF0\x9F\x99\x82";
 
 pub const OP_INDEX: u8 = 0x00;
