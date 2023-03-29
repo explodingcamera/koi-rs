@@ -15,6 +15,7 @@ pub struct Test {
     pub name: String,
     pub input_size: usize,
     pub results: HashMap<ImageFormatType, FormatResult>,
+    pub errored: bool,
 }
 
 #[derive(Debug)]

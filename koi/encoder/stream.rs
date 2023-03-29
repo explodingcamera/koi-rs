@@ -6,6 +6,13 @@ use crate::{
 use lz4_flex::frame::FrameEncoder;
 use std::io::{self, Read, Write};
 
+// pub struct PixelEncoderConfig {
+//     pub index_encoding: bool,
+//     pub diff_encoding: bool,
+//     pub luma_encoding: bool,
+//     pub alpha_diff_encoding: bool,
+// }
+
 // PixelEncoder is a stream encoder that encodes pixels one by one
 // - Writer is a wrapper around the underlying writer that can be either a lz4 encoder or a regular writer
 // - C is the number of channels in the image
@@ -96,6 +103,9 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
                 self.writer.write_all(&[curr_pixel.0[0], curr_pixel.0[3]])?;
                 return Ok(());
             } else {
+                if C != Channels::Rgba as u8 as usize {
+                    panic!("RGBA encoding is only supported for RGBA images");
+                }
                 // RGBA encoding (whenever alpha channel changes)
                 self.cache_pixel(&mut curr_pixel, hash);
                 self.writer.write_one(Op::Rgba as u8)?;
@@ -104,7 +114,7 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
             }
         }
 
-        // Difference between current and previous pixel
+        // // Difference between current and previous pixel
         let diff = curr_pixel.diff(&prev_pixel);
 
         // Diff encoding
@@ -114,14 +124,15 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
             return Ok(());
         }
 
-        // Luma encoding
-        if let Some(luma) = luma_diff(diff) {
-            self.cache_pixel(&mut curr_pixel, hash);
-            self.writer.write_all(&luma)?;
-            return Ok(());
-        }
+        // Luma encoding (broken on fast_decode)
+        // if let Some(luma) = luma_diff(diff) {
+        //     self.cache_pixel(&mut curr_pixel, hash);
+        //     self.writer.write_all(&luma)?;
+        //     return Ok(());
+        // }
 
         if is_gray {
+            println!("is_gray {}", curr_pixel.0[0]);
             // Gray encoding
             let RgbaColor([r, g, b, _]) = curr_pixel;
             if r == g && g == b {

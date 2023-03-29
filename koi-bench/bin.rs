@@ -16,7 +16,7 @@ use crate::util::from_png;
 static RUNS: usize = 3;
 
 fn main() -> io::Result<()> {
-    let mut suites = generate_test_suites("testsuite");
+    let mut suites = generate_test_suites("images");
 
     for suite in suites.values_mut() {
         println!("Running tests for {}", suite.name);
@@ -27,10 +27,13 @@ fn main() -> io::Result<()> {
             let input = std::fs::read(file)?;
             let (input, (width, height, channels)) = from_png(&input);
 
+            let (results, errored) = run_test(&input, width, height, channels);
+
             suite.tests.push(Test {
                 input_size: input.len(),
                 name: file.to_string(),
-                results: run_test(&input, width, height, channels),
+                results,
+                errored,
             });
         }
     }
@@ -45,12 +48,13 @@ fn run_test(
     width: u32,
     height: u32,
     channels: usize,
-) -> HashMap<ImageFormatType, FormatResult> {
+) -> (HashMap<ImageFormatType, FormatResult>, bool) {
     let mut results: HashMap<ImageFormatType, FormatResult> = HashMap::new();
+    let mut errored = false;
 
     if channels != 3 && channels != 4 {
         println!("Unsupported number of channels");
-        return results;
+        return (results, true);
     }
 
     'outer: for format in ImageFormatType::iter() {
@@ -64,6 +68,7 @@ fn run_test(
             let start = Instant::now();
             if let Err(e) = black_box(encoder.encode(input, &mut out, (width, height))) {
                 println!("Error encoding {format}, skipping: {e}");
+                errored = true;
                 continue 'outer;
             }
             shortest_encode = std::cmp::min(shortest_encode, start.elapsed().as_micros());
@@ -104,5 +109,5 @@ fn run_test(
         );
     }
 
-    results
+    (results, errored)
 }

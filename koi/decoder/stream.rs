@@ -9,7 +9,7 @@ use crate::{
 
 pub struct PixelDecoder<R: Read, const C: usize> {
     read_decoder: Reader<R>,
-    cache: [RgbaColor; CACHE_SIZE + 1],
+    cache: [RgbaColor; CACHE_SIZE],
     last_px: RgbaColor,
     pixels_in: usize,    // pixels decoded so far
     pixels_count: usize, // total number of pixels in the image
@@ -19,7 +19,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
     pub fn new(data: Reader<R>, pixels_count: usize) -> Self {
         Self {
             read_decoder: data,
-            cache: [RgbaColor([0, 0, 0, 0]); CACHE_SIZE + 1],
+            cache: [RgbaColor([0, 0, 0, 0]); CACHE_SIZE],
             last_px: RgbaColor([0, 0, 0, 255]),
             pixels_in: 0,
             pixels_count,
@@ -73,6 +73,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
             return Ok(0);
         }
 
+        let count = std::cmp::min(count, self.pixels_count - self.pixels_in);
         for i in 0..count {
             let [b1] = self.read_decoder.read_bytes::<1>()?;
             let buffer_offset = i * C;
@@ -121,9 +122,10 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
 
     #[inline]
     fn read_pixels_fast(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        println!("read pixels fast");
         let mut pixels_read = 0;
 
-        let mut buffer = vec![0u8; (buf.len() / 4) - 8]; // max possible compression ratio is 4:1 (without factoring in lz4 compression on top of that)
+        let mut buffer = vec![0u8; buf.len() / 4]; // max possible compression ratio is 4:1 (without factoring in lz4 compression on top of that)
         let mut buffer_pos = 0;
         let buffer_len = self.read_decoder.read(&mut buffer)?;
 
@@ -132,7 +134,30 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
         }
 
         let mut buffer_empty = false;
-        while buffer_pos < buffer_len && self.pixels_in < self.pixels_count {
+
+        if self.pixels_in >= self.pixels_count {
+            // get buffer_pos to end of buffer
+            let mut bytes = Vec::from(&buffer[buffer_pos..buffer_len]);
+            self.read_decoder.read_to_end(&mut bytes)?;
+
+            if bytes.len() < END_OF_IMAGE.len() {
+                println!("bytes: {:?}", bytes);
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Invalid end of image",
+                ));
+            }
+
+            // last 5 bytes should be the same as END_OF_IMAGE's last 5 bytes
+            if bytes[bytes.len() - 5..] != END_OF_IMAGE[END_OF_IMAGE.len() - 5..] {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Invalid end of image",
+                ));
+            }
+        }
+
+        while buffer_pos < buffer_len && self.pixels_in < self.pixels_count && !buffer_empty {
             if unlikely(buffer_empty) {
                 return Ok(pixels_read * C);
             }
@@ -151,14 +176,41 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
                 OP_LUMA..=OP_LUMA_END => 1,
             };
 
-            if unlikely((buffer_pos + required_bytes) >= buffer_len) {
+            let available_bytes = buffer_len - 1 - buffer_pos;
+            let required_bytes = required_bytes as usize;
+
+            println!(
+                "b1: {} req: {} avail: {}",
+                b1, required_bytes, available_bytes
+            );
+
+            if unlikely(required_bytes > available_bytes) {
+                println!(
+                    "we just read {}/{} bytes, but we need {} more bytes and we only have {} bytes left",
+                    buffer_pos,
+                    buffer_len,
+                    required_bytes,
+                    available_bytes
+                );
+
                 buffer_empty = true;
-                let available_bytes = buffer_len - buffer_pos;
+                println!("available: {:?}", &buffer[buffer_pos..buffer_len]);
+                // copy current byte and remaining bytes to the start of the buffer
                 buffer.copy_within(buffer_pos..buffer_len, 0);
                 buffer_pos = 0;
+
+                println!("buffer: {:?}", &buffer[0..available_bytes]);
+                println!(
+                    "so we'll need to read {} more bytes from {} to {}",
+                    required_bytes - available_bytes,
+                    available_bytes,
+                    required_bytes
+                );
+
+                // read the required bytes into the buffer after the bytes we just copied to the start
                 let read = self
                     .read_decoder
-                    .read(&mut buffer[available_bytes..available_bytes + required_bytes])?;
+                    .read(&mut buffer[available_bytes..required_bytes])?;
 
                 if read == 0 {
                     return Err(std::io::Error::new(
@@ -196,7 +248,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
                     if likely(C < Channels::Rgba as u8 as usize) {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
-                            "Invalid opcode RGBA for 3 channels",
+                            format!("Invalid opcode RGBA for {} channels", C),
                         ));
                     }
                     let r = buffer[buffer_pos + 1];
@@ -221,20 +273,6 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
             buffer_pos += required_bytes + 1;
         }
 
-        if self.pixels_in >= self.pixels_count {
-            // get buffer_pos to end of buffer
-            let mut bytes = Vec::from(&buffer[buffer_pos..buffer_len]);
-            self.read_decoder.read_to_end(&mut bytes)?;
-
-            // last 5 bytes should be the same as END_OF_IMAGE's last 5 bytes
-            if bytes[bytes.len() - 5..] != END_OF_IMAGE[END_OF_IMAGE.len() - 5..] {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Invalid end of image",
-                ));
-            }
-        }
-
         Ok(pixels_read * C)
     }
 }
@@ -242,6 +280,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
 // implement read trait for Decoder
 impl<R: Read, const C: usize> Read for PixelDecoder<R, C> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        // self.decode_pixels(buf, 100)
         self.read_pixels_fast(buf)
     }
 }
