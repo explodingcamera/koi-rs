@@ -1,5 +1,4 @@
 use lz4_flex::frame::FrameDecoder;
-use smallvec::SmallVec;
 use std::io::{self, BufReader, Read, Write};
 
 use super::reader::Reader;
@@ -10,24 +9,20 @@ use crate::{
 
 pub struct PixelDecoder<R: Read, const C: usize> {
     read_decoder: Reader<R>,
-    cache: [RgbaColor; CACHE_SIZE],
+    cache: [RgbaColor; CACHE_SIZE + 1],
     last_px: RgbaColor,
     pixels_in: usize,    // pixels decoded so far
     pixels_count: usize, // total number of pixels in the image
-
-    remainder: smallvec::SmallVec<[u8; 3]>,
 }
 
 impl<R: Read, const C: usize> PixelDecoder<R, C> {
     pub fn new(data: Reader<R>, pixels_count: usize) -> Self {
         Self {
             read_decoder: data,
-            cache: [RgbaColor([0, 0, 0, 0]); CACHE_SIZE],
+            cache: [RgbaColor([0, 0, 0, 0]); CACHE_SIZE + 1],
             last_px: RgbaColor([0, 0, 0, 255]),
             pixels_in: 0,
             pixels_count,
-
-            remainder: smallvec::SmallVec::with_capacity(3),
         }
     }
 
@@ -50,7 +45,10 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
     }
 
     fn handle_end_of_image(&mut self) -> std::io::Result<()> {
-        let padding = self.read_decoder.read_bytes::<8>()?;
+        println!("end of imagee");
+        let mut padding = [0; 8];
+        self.read_decoder.read_exact(&mut padding)?;
+        println!("padding: {:?}", padding);
 
         // last 8 bytes should be END_OF_IMAGE
         if padding[0..] != END_OF_IMAGE {
@@ -125,34 +123,22 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
     fn read_pixels_fast(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let mut pixels_read = 0;
 
-        let mut buffer = vec![0u8; 100]; // max possible compression ratio is 4:1 (without factoring in lz4 compression on top of that)
+        let mut buffer = vec![0u8; (buf.len() / 4) - 8]; // max possible compression ratio is 4:1 (without factoring in lz4 compression on top of that)
         let mut buffer_pos = 0;
         let buffer_len = self.read_decoder.read(&mut buffer)?;
 
-        if unlikely(buffer_len == 0) {
-            cold();
+        if buffer_len == 0 || self.pixels_in >= self.pixels_count {
             return Ok(0);
         }
 
-        println!("buffer len: {}", buffer_len);
-
         let mut buffer_empty = false;
-        while buffer_pos < buffer_len {
+        while buffer_pos < buffer_len && self.pixels_in < self.pixels_count {
             if unlikely(buffer_empty) {
                 return Ok(pixels_read * C);
             }
 
-            println!(
-                "pixels in: {}, pixels count: {}",
-                self.pixels_in, self.pixels_count
-            );
-
-            if unlikely(self.pixels_in >= self.pixels_count) {
-                self.handle_end_of_image()?;
-                return Ok(0);
-            }
-
             let b1 = buffer[buffer_pos];
+
             let buffer_offset = pixels_read * C;
             let required_bytes = match b1 {
                 OP_INDEX..=OP_INDEX_END => 0,
@@ -173,8 +159,6 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
                 let read = self
                     .read_decoder
                     .read(&mut buffer[available_bytes..available_bytes + required_bytes])?;
-
-                println!("read: {}/{}", read, required_bytes);
 
                 if read == 0 {
                     return Err(std::io::Error::new(
@@ -209,7 +193,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
                     RgbaColor([r, g, b, 255])
                 }
                 OP_RGBA => {
-                    if likely(C >= Channels::Rgba as u8 as usize) {
+                    if likely(C < Channels::Rgba as u8 as usize) {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
                             "Invalid opcode RGBA for 3 channels",
@@ -235,6 +219,20 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
             self.cache[pixel_hash(pixel) as usize] = pixel;
             pixels_read += 1;
             buffer_pos += required_bytes + 1;
+        }
+
+        if self.pixels_in >= self.pixels_count {
+            // get buffer_pos to end of buffer
+            let mut bytes = Vec::from(&buffer[buffer_pos..buffer_len]);
+            self.read_decoder.read_to_end(&mut bytes)?;
+
+            // last 5 bytes should be the same as END_OF_IMAGE's last 5 bytes
+            if bytes[bytes.len() - 5..] != END_OF_IMAGE[END_OF_IMAGE.len() - 5..] {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Invalid end of image",
+                ));
+            }
         }
 
         Ok(pixels_read * C)
