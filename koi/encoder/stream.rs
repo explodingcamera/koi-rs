@@ -132,7 +132,6 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         // }
 
         if is_gray {
-            println!("is_gray {}", curr_pixel.0[0]);
             // Gray encoding
             let RgbaColor([r, g, b, _]) = curr_pixel;
             if r == g && g == b {

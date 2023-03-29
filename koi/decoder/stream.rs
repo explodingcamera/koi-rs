@@ -45,10 +45,8 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
     }
 
     fn handle_end_of_image(&mut self) -> std::io::Result<()> {
-        println!("end of imagee");
         let mut padding = [0; 8];
         self.read_decoder.read_exact(&mut padding)?;
-        println!("padding: {:?}", padding);
 
         // last 8 bytes should be END_OF_IMAGE
         if padding[0..] != END_OF_IMAGE {
@@ -122,7 +120,6 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
 
     #[inline]
     fn read_pixels_fast(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        println!("read pixels fast");
         let mut pixels_read = 0;
 
         let mut buffer = vec![0u8; buf.len() / 4]; // max possible compression ratio is 4:1 (without factoring in lz4 compression on top of that)
@@ -179,33 +176,11 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
             let available_bytes = buffer_len - 1 - buffer_pos;
             let required_bytes = required_bytes as usize;
 
-            println!(
-                "b1: {} req: {} avail: {}",
-                b1, required_bytes, available_bytes
-            );
-
             if unlikely(required_bytes > available_bytes) {
-                println!(
-                    "we just read {}/{} bytes, but we need {} more bytes and we only have {} bytes left",
-                    buffer_pos,
-                    buffer_len,
-                    required_bytes,
-                    available_bytes
-                );
-
                 buffer_empty = true;
-                println!("available: {:?}", &buffer[buffer_pos..buffer_len]);
                 // copy current byte and remaining bytes to the start of the buffer
                 buffer.copy_within(buffer_pos..buffer_len, 0);
                 buffer_pos = 0;
-
-                println!("buffer: {:?}", &buffer[0..available_bytes]);
-                println!(
-                    "so we'll need to read {} more bytes from {} to {}",
-                    required_bytes - available_bytes,
-                    available_bytes,
-                    required_bytes
-                );
 
                 // read the required bytes into the buffer after the bytes we just copied to the start
                 let read = self
