@@ -3,7 +3,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 // magic number to identify koi files
 pub const MAGIC: [u8; 8] = *b"KOI \xF0\x9F\x99\x82";
 pub const MASK: u8 = 0xC0;
-pub const CACHE_SIZE: usize = 62; // -2 seems to give better compression on average than 64 with our current hash function
+pub const CACHE_SIZE: usize = 64;
 pub const END_OF_IMAGE: [u8; 8] = *b"\x00\x00\x00\x00\xF0\x9F\x99\x82";
 
 pub const OP_INDEX: u8 = 0x00;
@@ -35,6 +35,14 @@ pub enum Op {
 pub struct RgbaColor(pub [u8; 4]);
 
 impl RgbaColor {
+    pub fn from_rgb([r, g, b]: [u8; 3]) -> Self {
+        RgbaColor([r, g, b, 0xff])
+    }
+
+    pub fn from_grayscale(gray: u8) -> Self {
+        RgbaColor([gray, gray, gray, 0xff])
+    }
+
     pub fn is_gray(&self) -> bool {
         let RgbaColor([r, g, b, _]) = self;
         r == g && g == b

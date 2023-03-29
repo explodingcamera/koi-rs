@@ -1,10 +1,9 @@
-use std::io::{BufWriter, Write};
-
 use lz4_flex::frame::FrameEncoder;
+use std::io::Write;
 
 pub enum Writer<W: Write> {
     Lz4Encoder(Box<FrameEncoder<W>>),
-    UncompressedEncoder(BufWriter<W>), // FrameEncoder already buffers internally, so for consistency we also use BufWriter here
+    UncompressedEncoder(W), // FrameEncoder already buffers internally, so for consistency we also use BufWriter here
 }
 
 impl<W: Write> Writer<W> {

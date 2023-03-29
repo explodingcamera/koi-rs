@@ -1,4 +1,5 @@
 use std::hint::black_box;
+use std::io::Cursor;
 use std::{collections::HashMap, io, time::Instant};
 use strum::IntoEnumIterator;
 
@@ -12,7 +13,7 @@ use crate::suite::{generate_test_suites, FormatResult, Test};
 use crate::util::from_png;
 
 // how many times to run each test (to get the minimum time)
-static RUNS: usize = 2;
+static RUNS: usize = 3;
 
 fn main() -> io::Result<()> {
     let mut suites = generate_test_suites("images");
@@ -26,10 +27,13 @@ fn main() -> io::Result<()> {
             let input = std::fs::read(file)?;
             let (input, (width, height, channels)) = from_png(&input);
 
+            let (results, errored) = run_test(&input, width, height, channels);
+
             suite.tests.push(Test {
                 input_size: input.len(),
                 name: file.to_string(),
-                results: run_test(&input, width, height, channels),
+                results,
+                errored,
             });
         }
     }
@@ -44,58 +48,66 @@ fn run_test(
     width: u32,
     height: u32,
     channels: usize,
-) -> HashMap<ImageFormatType, FormatResult> {
+) -> (HashMap<ImageFormatType, FormatResult>, bool) {
     let mut results: HashMap<ImageFormatType, FormatResult> = HashMap::new();
+    let mut errored = false;
 
-    for format in ImageFormatType::iter() {
-        let mut format_impl = match channels {
-            3 => format.get_impl::<3>(),
-            4 => format.get_impl::<4>(),
-            _ => {
-                println!("Unsupported channel count: {}", channels);
-                continue;
-            } // TODO: images/textures_pk/pkw_wall11e.png
-        };
+    if channels != 3 && channels != 4 {
+        println!("Unsupported number of channels");
+        return (results, true);
+    }
 
+    'outer: for format in ImageFormatType::iter() {
         // ENCODE
         println!("encoding {format}...");
-        let mut shortest_encode: u128 = 0;
-        let mut output = vec![0; input.len()];
-        let start = Instant::now();
-        for _ in 0..RUNS {
-            black_box(format_impl.encode(input, &mut output, (width, height))).unwrap_or_else(
-                |e| {
-                    println!("Error encoding {format}: {e}");
-                },
-            );
+        let mut shortest_encode: u128 = u128::MAX;
+        let mut output = Vec::new();
+        for r in 0..RUNS {
+            let mut out = Vec::with_capacity(input.len());
+            let mut encoder = format.get_impl_dyn(channels);
+            let start = Instant::now();
+            if let Err(e) = black_box(encoder.encode(input, &mut out, (width, height))) {
+                println!("Error encoding {format}, skipping: {e}");
+                errored = true;
+                continue 'outer;
+            }
+            shortest_encode = std::cmp::min(shortest_encode, start.elapsed().as_micros());
 
-            let duration = start.elapsed().as_micros();
-            shortest_encode = std::cmp::min(shortest_encode, duration)
+            if r == 0 {
+                drop(encoder);
+                output = out;
+            }
         }
+
+        println!("encoded {} bytes", output.len());
         let encode_size = output.len();
 
-        // DECODE (TODO: broken)
+        // DECODE
         println!("decoding {format}...");
-        let mut shortest_decode: u128 = 0;
-        let start = Instant::now();
-        let mut decode_output = vec![0; input.len()];
+        let mut shortest_decode: u128 = u128::MAX;
         for _ in 0..RUNS {
-            format_impl
-                .decode(&output, &mut decode_output, (width, height))
-                .unwrap();
-            let duration = start.elapsed().as_micros();
-            shortest_decode = std::cmp::min(shortest_decode, duration)
+            let data = Cursor::new(output.clone());
+
+            let mut decoder = format.get_impl_dyn(channels);
+            let start = Instant::now();
+
+            if let Err(e) = black_box(decoder.decode(data, Vec::new(), (width, height))) {
+                println!("Error decoding {format}, skipping: {e}");
+                continue 'outer;
+            }
+
+            shortest_decode = std::cmp::min(shortest_decode, start.elapsed().as_micros())
         }
 
         results.insert(
             format,
             FormatResult {
-                decode_min_time: 0,
+                decode_min_time: shortest_decode,
                 encode_min_time: shortest_encode,
                 encode_size,
             },
         );
     }
 
-    results
+    (results, errored)
 }

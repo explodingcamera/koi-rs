@@ -16,7 +16,7 @@ fn read_png(path: &str) -> (Vec<u8>, (u32, u32)) {
 }
 
 const CHANNELS: usize = 3;
-const FILE: &str = "her_floor_1.png";
+const FILE: &str = "images/photo_tecnick/RGB_OR_1200x1200_043.png";
 
 pub fn run() {
     let (test_image, (width, height)) = read_png(FILE);
