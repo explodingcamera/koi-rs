@@ -1,8 +1,0 @@
-- based on https://github.com/phoboslab/qoi/blob/master/qoibench.c
-- image suite: https://qoiformat.org/benchmark/
-- plots using https://docs.rs/plotters/latest/plotters/
-- run as black_box to prevent compiler optimizations
-- no warmup before benchmarking, always just use the minimum
-- add some more transparent images that play well with koi
-- use std::time::Instant https://rust-lang-nursery.github.io/rust-cookbook/datetime/duration.html
-- https://crates.io/crates/walkdir

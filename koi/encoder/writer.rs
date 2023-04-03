@@ -20,6 +20,13 @@ impl<W: Write> Write for Writer<W> {
         }
     }
 
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        match self {
+            Writer::Lz4Encoder(ref mut encoder) => encoder.write_all(buf),
+            Writer::UncompressedEncoder(ref mut encoder) => encoder.write_all(buf),
+        }
+    }
+
     fn flush(&mut self) -> std::io::Result<()> {
         match self {
             Writer::Lz4Encoder(ref mut encoder) => encoder.flush(),

@@ -4,7 +4,7 @@ use std::io::{self, BufReader, Read, Write};
 use super::reader::Reader;
 use crate::{
     types::*,
-    util::{pixel_hash, unlikely},
+    util::{likely, pixel_hash, unlikely},
 };
 
 pub struct PixelDecoder<R: Read, const C: usize> {
@@ -67,8 +67,6 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
         let mut pixels_read = 0;
 
         if self.pixels_in >= self.pixels_count {
-            // println!("end of image");
-            // println!("pixels in: {}", self.pixels_in);
             self.handle_end_of_image()?;
             return Ok(0);
         }
@@ -160,11 +158,8 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
             }
         }
 
-        while buffer_pos < buffer_len && self.pixels_in < self.pixels_count && !buffer_empty {
-            if unlikely(buffer_empty) {
-                return Ok(pixels_read * C);
-            }
-
+        while likely(buffer_pos < buffer_len && self.pixels_in < self.pixels_count && !buffer_empty)
+        {
             let b1 = buffer[buffer_pos];
 
             let buffer_offset = pixels_read * C;
@@ -256,7 +251,10 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
 // implement read trait for Decoder
 impl<R: Read, const C: usize> Read for PixelDecoder<R, C> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        // self.decode_pixels(buf, 100)
+        self.read_pixels_fast(buf)
+    }
+
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
         self.read_pixels_fast(buf)
     }
 }

@@ -14,6 +14,13 @@ impl<R: Read> Read for Reader<R> {
             Reader::Lz4Decoder(decoder) => decoder.read(buf),
         }
     }
+
+    fn read_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
+        match self {
+            Reader::UncompressedDecoder(reader) => reader.read_exact(buf),
+            Reader::Lz4Decoder(decoder) => decoder.read_exact(buf),
+        }
+    }
 }
 
 impl<R: Read> Reader<R> {

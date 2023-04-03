@@ -15,7 +15,7 @@ use crate::suite::{generate_test_suites, FormatResult, Test};
 use crate::util::from_png;
 
 // how many times to run each test (to get the minimum time)
-static RUNS: usize = 2;
+static RUNS: usize = 4;
 
 fn main() -> io::Result<()> {
     let mut suites = generate_test_suites("images");
@@ -62,50 +62,65 @@ fn main() -> io::Result<()> {
     println!("\n \x1b[1mResults\x1b[0m");
 
     for suite in suites.values() {
-        let successfull_tests = suite.tests.iter().filter(|t| !t.errored);
-        let total_input_size: usize = successfull_tests.clone().map(|t| t.input_size).sum();
+        let successfull_tests = suite
+            .tests
+            .iter()
+            .filter(|t| !t.errored)
+            .collect::<Vec<_>>();
 
-        if total_input_size == 0 {
-            continue;
-        }
-
-        println!("┌────────────────────────────────────┐");
-        println!("│ {suite_name: <34} │", suite_name = suite.name);
-        println!("├────────┬─────────┬─────────┬───────┤");
-        println!("│ format │ encode  │ decode  │ ratio │");
-        println!("├────────┼─────────┼─────────┼───────┤");
-
-        //        | Png   :   121ms -   162ms -  0.10
-        for format in ImageFormatType::iter() {
-            let total_size: usize = successfull_tests
-                .clone()
-                .map(|t| t.results.get(&format).unwrap().encode_size)
-                .sum();
-
-            let total_time_encode: u128 = successfull_tests
-                .clone()
-                .map(|t| t.results.get(&format).unwrap().encode_min_time)
-                .sum();
-
-            let total_time_decode: u128 = successfull_tests
-                .clone()
-                .map(|t| t.results.get(&format).unwrap().decode_min_time)
-                .sum();
-
-            println!(
-                // "{format}: {size}kb - {encode}ms - {decode}ms - {compression_rate}",
-                // only print the first 2 digits after the comma for compression rate
-                "│ {format: <6} │ {encode: >5}ms │ {decode: >5}ms │ {compression_rate:>5.2} │",
-                format = format,
-                encode = total_time_encode / 1000,
-                decode = total_time_decode / 1000,
-                compression_rate = total_size as f64 / total_input_size as f64
-            );
-        }
-        println!("└────────┴─────────┴─────────┴───────┘");
+        print_results(successfull_tests, &suite.name);
     }
 
+    let all_tests = suites
+        .values()
+        .flat_map(|s| s.tests.iter())
+        .filter(|t| !t.errored)
+        .collect::<Vec<_>>();
+
+    print_results(all_tests, "Overall");
+
     Ok(())
+}
+
+fn print_results(tests: Vec<&Test>, title: &str) {
+    let total_input_size: usize = tests.iter().map(|t| t.input_size).sum();
+
+    if total_input_size == 0 {
+        return;
+    }
+
+    println!("┌─────────────────────────────────────┐");
+    println!("│ {title: <35} │", title = title);
+    println!("├─────────┬─────────┬─────────┬───────┤");
+    println!("│ format  │ encode  │ decode  │ ratio │");
+    println!("├─────────┼─────────┼─────────┼───────┤");
+    for format in ImageFormatType::iter() {
+        let total_size: usize = tests
+            .iter()
+            .map(|t| t.results.get(&format).unwrap().encode_size)
+            .sum();
+
+        let total_time_encode: u128 = tests
+            .iter()
+            .map(|t| t.results.get(&format).unwrap().encode_min_time)
+            .sum();
+
+        let total_time_decode: u128 = tests
+            .iter()
+            .map(|t| t.results.get(&format).unwrap().decode_min_time)
+            .sum();
+
+        println!(
+            // "{format}: {size}kb - {encode}ms - {decode}ms - {compression_rate}",
+            // only print the first 2 digits after the comma for compression rate
+            "│ {format: <7} │ {encode: >5}ms │ {decode: >5}ms │ {compression_rate:>5.2} │",
+            format = format,
+            encode = total_time_encode / 1000,
+            decode = total_time_decode / 1000,
+            compression_rate = total_size as f64 / total_input_size as f64
+        );
+    }
+    println!("└─────────┴─────────┴─────────┴───────┘");
 }
 
 fn run_test(
@@ -131,7 +146,8 @@ fn run_test(
             let mut out = Vec::with_capacity(input.len());
             let mut encoder = format.get_impl_dyn(channels);
             let start = Instant::now();
-            if let Err(_e) = black_box(encoder.encode(input, &mut out, (width, height))) {
+            if let Err(_e) = encoder.encode(black_box(input), black_box(&mut out), (width, height))
+            {
                 // println!("Error encoding {format}, skipping: {e}");
                 errored = true;
                 continue 'outer;
@@ -154,10 +170,12 @@ fn run_test(
             let data = Cursor::new(output.clone());
 
             let mut decoder = format.get_impl_dyn(channels);
+            let out = Vec::with_capacity(channels * (width * height) as usize);
             let start = Instant::now();
 
-            if let Err(_e) = black_box(decoder.decode(data, Vec::new(), (width, height))) {
+            if let Err(_e) = decoder.decode(black_box(data), black_box(out), (width, height)) {
                 // println!("Error decoding {format}, skipping: {e}");
+                errored = true;
                 continue 'outer;
             }
 

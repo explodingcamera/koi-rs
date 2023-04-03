@@ -66,27 +66,18 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         curr_pixel: RgbaColor,
         prev_pixel: RgbaColor,
     ) -> std::io::Result<()> {
-        if unlikely(C < Channels::Rgba as u8 as usize) {
-            // alpha channel should be 255 for all pixels in RGB images
-            assert_eq!(
-                curr_pixel.0[3], 255,
-                "alpha channel should be 255 for all pixels in RGB images"
-            );
-        };
-
         self.pixels_in += 1;
         let mut curr_pixel = curr_pixel;
 
         // index encoding
         let hash = pixel_hash(curr_pixel);
         if self.cache[hash as usize] == curr_pixel {
-            // self.cache_pixel(&mut curr_pixel, hash);
             self.writer.write_one(u8::from(Op::Index) | hash)?;
             return Ok(());
         }
 
         // alpha diff encoding (whenever only alpha channel changes)
-        if curr_pixel.0[..3] == prev_pixel.0[..3] && curr_pixel.0[3] != prev_pixel.0[3] {
+        if curr_pixel.0[..3] == prev_pixel.0[..3] {
             if let Some(diff) = prev_pixel.alpha_diff(&curr_pixel) {
                 self.cache_pixel(&mut curr_pixel, hash);
                 self.writer.write_one(diff)?;
@@ -98,23 +89,28 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         if curr_pixel.0[3] != prev_pixel.0[3] && curr_pixel.0[3] != 255 {
             if is_gray {
                 // Gray Alpha encoding (whenever alpha channel changes and pixel is gray)
-                self.cache_pixel(&mut curr_pixel, hash);
-                self.writer.write_one(Op::GrayAlpha as u8)?;
-                self.writer.write_all(&[curr_pixel.0[0], curr_pixel.0[3]])?;
-                return Ok(());
+                self.writer
+                    .write_all(&[Op::GrayAlpha as u8, curr_pixel.0[0], curr_pixel.0[3]])?;
             } else {
-                if C != Channels::Rgba as u8 as usize {
+                if unlikely(C != Channels::Rgba as u8 as usize) {
                     panic!("RGBA encoding is only supported for RGBA images");
                 }
+
                 // RGBA encoding (whenever alpha channel changes)
-                self.cache_pixel(&mut curr_pixel, hash);
-                self.writer.write_one(Op::Rgba as u8)?;
-                self.writer.write_all(&curr_pixel.0)?;
-                return Ok(());
+                self.writer.write_all(&[
+                    Op::Rgba as u8,
+                    curr_pixel.0[0],
+                    curr_pixel.0[1],
+                    curr_pixel.0[2],
+                    curr_pixel.0[3],
+                ])?;
             }
+
+            self.cache_pixel(&mut curr_pixel, hash);
+            return Ok(());
         }
 
-        // // Difference between current and previous pixel
+        // Difference between current and previous pixel
         let diff = curr_pixel.diff(&prev_pixel);
 
         // Diff encoding
@@ -124,7 +120,7 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
             return Ok(());
         }
 
-        // Luma encoding (broken on fast_decode) TODO: fix
+        // Luma encoding (a little bit broken on fast_decode) TODO: fix
         if let Some(luma) = luma_diff(diff) {
             self.cache_pixel(&mut curr_pixel, hash);
             self.writer.write_all(&luma)?;
@@ -167,11 +163,9 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
     #[inline]
     fn write_aligned(&mut self, buf: &[u8]) -> std::io::Result<()> {
         for chunk in buf.chunks_exact(C) {
-            let mut curr_pixel = RgbaColor([0, 0, 0, 255]);
-            curr_pixel.0[..C].copy_from_slice(chunk);
+            let curr_pixel = RgbaColor::from_channels::<C>(&chunk);
             self.encode_pixel(curr_pixel, self.prev_pixel)?;
             self.prev_pixel = curr_pixel;
-            // we've reached the end of the buffer and don't have enough bytes to fill a pixel
         }
 
         if buf.len() % C != 0 {

@@ -39,6 +39,12 @@ impl RgbaColor {
         RgbaColor([r, g, b, 0xff])
     }
 
+    pub fn from_channels<const C: usize>(channels: &[u8]) -> Self {
+        let mut color = [0, 0, 0, 0xff];
+        color[..C].copy_from_slice(channels);
+        RgbaColor(color)
+    }
+
     pub fn from_grayscale(gray: u8) -> Self {
         RgbaColor([gray, gray, gray, 0xff])
     }
