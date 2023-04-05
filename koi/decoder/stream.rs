@@ -50,7 +50,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
         self.read_decoder.read_exact(&mut padding)?;
 
         // last 8 bytes should be END_OF_IMAGE
-        if padding[0..] != END_OF_IMAGE {
+        if padding[2..] != END_OF_IMAGE[2..] {
             println!("padding: {:?}", padding);
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -63,6 +63,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
 
     #[allow(dead_code)]
     #[inline]
+    // somehow the faster version sometimes has issues with the hash function
     fn decode_pixels(&mut self, buf: &mut [u8], count: usize) -> std::io::Result<usize> {
         let mut pixels_read = 0;
 
@@ -138,44 +139,32 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
         let mut buffer_empty = false;
 
         if self.pixels_in >= self.pixels_count {
-            // get buffer_pos to end of buffer
-            let mut bytes = Vec::from(&buffer[buffer_pos..buffer_len]);
-            self.read_decoder.read_to_end(&mut bytes)?;
+            self.handle_end_of_image()?;
+            // // get buffer_pos to end of buffer
+            // let mut bytes = Vec::from(&buffer[buffer_pos..buffer_len]);
+            // self.read_decoder.read_to_end(&mut bytes)?;
 
-            if bytes.len() < END_OF_IMAGE.len() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Invalid end of image",
-                ));
-            }
+            // if bytes.len() < END_OF_IMAGE.len() {
+            //     return Err(std::io::Error::new(
+            //         std::io::ErrorKind::InvalidData,
+            //         "Invalid end of image",
+            //     ));
+            // }
 
-            // last 5 bytes should be the same as END_OF_IMAGE's last 5 bytes
-            if bytes[bytes.len() - 5..] != END_OF_IMAGE[END_OF_IMAGE.len() - 5..] {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "Invalid end of image",
-                ));
-            }
+            // // last 5 bytes should be the same as END_OF_IMAGE's last 5 bytes
+            // if bytes[bytes.len() - 5..] != END_OF_IMAGE[END_OF_IMAGE.len() - 5..] {
+            //     return Err(std::io::Error::new(
+            //         std::io::ErrorKind::InvalidData,
+            //         "Invalid end of image",
+            //     ));
+            // }
         }
 
         while likely(buffer_pos < buffer_len && self.pixels_in < self.pixels_count && !buffer_empty)
         {
-            let b1 = buffer[buffer_pos];
-
             let buffer_offset = pixels_read * C;
-            let required_bytes = match b1 {
-                OP_INDEX..=OP_INDEX_END => 0,
-                OP_GRAY => 1,
-                OP_GRAY_ALPHA => 2,
-                OP_RGB => 3,
-                OP_RGBA => 4,
-                OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END => 0,
-                OP_DIFF..=OP_DIFF_END => 0,
-                OP_LUMA..=OP_LUMA_END => 1,
-            };
-
+            let required_bytes = Self::get_required_bytes(buffer[buffer_pos]);
             let available_bytes = buffer_len - 1 - buffer_pos;
-            let required_bytes = required_bytes as usize;
 
             if unlikely(required_bytes > available_bytes) {
                 buffer_empty = true;
@@ -195,56 +184,107 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
                 buffer_pos = 0;
             }
 
-            let pixel = match b1 {
-                OP_INDEX..=OP_INDEX_END => {
-                    self.last_px = self.cache[b1 as usize];
-                    buf[buffer_offset..buffer_offset + C].copy_from_slice(&self.last_px.0[..C]);
-                    self.pixels_in += 1;
-                    pixels_read += 1;
-                    buffer_pos += 1;
-                    continue;
-                }
-                OP_GRAY => {
-                    let b2 = buffer[buffer_pos + 1];
-                    RgbaColor::from_grayscale(b2)
-                }
-                OP_GRAY_ALPHA => {
-                    let b2 = buffer[buffer_pos + 1];
-                    let b3 = buffer[buffer_pos + 2];
-                    RgbaColor([b2, b2, b2, b3])
-                }
-                OP_RGB => {
-                    let r = buffer[buffer_pos + 1];
-                    let g = buffer[buffer_pos + 2];
-                    let b = buffer[buffer_pos + 3];
-                    RgbaColor([r, g, b, 255])
-                }
-                OP_RGBA => {
-                    if unlikely(C < Channels::Rgba as u8 as usize) {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!("Invalid opcode RGBA for {} channels", C),
-                        ));
-                    }
-                    RgbaColor(buffer[buffer_pos + 1..buffer_pos + 5].try_into().unwrap())
-                }
-                OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END => self.last_px.apply_alpha_diff(b1),
-                OP_DIFF..=OP_DIFF_END => self.last_px.apply_diff(b1),
-                OP_LUMA..=OP_LUMA_END => {
-                    let b2 = buffer[buffer_pos + 1];
-                    self.last_px.apply_luma(b1, b2)
-                }
-            };
-
-            buf[buffer_offset..buffer_offset + C].copy_from_slice(&pixel.0[..C]);
-            self.pixels_in += 1;
-            self.last_px = pixel;
-            self.cache[pixel_hash(pixel) as usize] = pixel;
+            buffer_pos =
+                self.read_pixel(&mut buffer, buffer_pos, buf, buffer_offset, required_bytes)?;
             pixels_read += 1;
-            buffer_pos += required_bytes + 1;
         }
 
         Ok(pixels_read * C)
+    }
+
+    fn get_required_bytes(opcode: u8) -> usize {
+        match opcode {
+            OP_INDEX..=OP_INDEX_END => 0,
+            OP_GRAY => 1,
+            OP_GRAY_ALPHA => 2,
+            OP_RGB => 3,
+            OP_RGBA => 4,
+            OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END => 0,
+            OP_DIFF..=OP_DIFF_END => 0,
+            OP_LUMA..=OP_LUMA_END => 1,
+        }
+    }
+
+    // returns the number of bytes read from the input buffer, always writes C bytes to the output buffer
+    #[inline]
+    fn read_pixel(
+        &mut self,
+        buf_in: &[u8],
+        buffer_in_pos: usize,
+        buf_out: &mut [u8],
+        buffer_offset: usize,
+        required_bytes: usize,
+    ) -> io::Result<usize> {
+        let b1 = buf_in[buffer_in_pos];
+
+        let pixel = match b1 {
+            OP_INDEX..=OP_INDEX_END => {
+                self.last_px = self.cache[b1 as usize];
+                buf_out[buffer_offset..buffer_offset + C].copy_from_slice(&self.last_px.0[..C]);
+                self.pixels_in += 1;
+                return Ok(buffer_in_pos + 1);
+            }
+            OP_GRAY => {
+                let b2 = buf_in[buffer_in_pos + 1];
+                RgbaColor::from_grayscale(b2)
+            }
+            OP_GRAY_ALPHA => {
+                let b2 = buf_in[buffer_in_pos + 1];
+                let b3 = buf_in[buffer_in_pos + 2];
+                RgbaColor([b2, b2, b2, b3])
+            }
+            OP_RGB => {
+                let r = buf_in[buffer_in_pos + 1];
+                let g = buf_in[buffer_in_pos + 2];
+                let b = buf_in[buffer_in_pos + 3];
+                RgbaColor([r, g, b, 255])
+            }
+            OP_RGBA => {
+                if unlikely(C < Channels::Rgba as u8 as usize) {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("Invalid opcode RGBA for {} channels", C),
+                    ));
+                }
+                RgbaColor(
+                    buf_in[buffer_in_pos + 1..buffer_in_pos + 5]
+                        .try_into()
+                        .unwrap(),
+                )
+            }
+            OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END => self.last_px.apply_alpha_diff(b1),
+            OP_DIFF..=OP_DIFF_END => self.last_px.apply_diff(b1),
+            OP_LUMA..=OP_LUMA_END => {
+                let b2 = buf_in[buffer_in_pos + 1];
+                self.last_px.apply_luma(b1, b2)
+            }
+        };
+
+        buf_out[buffer_offset..buffer_offset + C].copy_from_slice(&pixel.0[..C]);
+        self.pixels_in += 1;
+        self.last_px = pixel;
+        self.cache[pixel_hash(pixel) as usize] = pixel;
+
+        return Ok(buffer_in_pos + required_bytes + 1);
+    }
+
+    pub fn read_all_pixels(&mut self, input: &[u8], output: &mut [u8]) -> io::Result<usize> {
+        let mut buffer_pos = 0;
+
+        while self.pixels_in < self.pixels_count {
+            let required_bytes = Self::get_required_bytes(input[buffer_pos]);
+
+            buffer_pos = self.read_pixel(
+                &input,
+                buffer_pos,
+                output,
+                self.pixels_in * C,
+                required_bytes,
+            )?;
+        }
+
+        self.handle_end_of_image()?;
+        Ok(self.pixels_in * C + 8)
     }
 }
 

@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::hint::black_box;
-use std::io::Cursor;
 use std::{io, time::Instant};
 use strum::IntoEnumIterator;
 
@@ -167,13 +166,14 @@ fn run_test(
         // println!("decoding {format}...");
         let mut shortest_decode: u128 = u128::MAX;
         for _ in 0..RUNS {
-            let data = Cursor::new(output.clone());
+            let data = output.clone();
 
             let mut decoder = format.get_impl_dyn(channels);
-            let out = Vec::with_capacity(channels * (width * height) as usize);
+            let mut out = Vec::with_capacity(channels * (width * height) as usize);
             let start = Instant::now();
 
-            if let Err(_e) = decoder.decode(black_box(data), black_box(out), (width, height)) {
+            if let Err(_e) = decoder.decode(black_box(&data), black_box(&mut out), (width, height))
+            {
                 // println!("Error decoding {format}, skipping: {e}");
                 errored = true;
                 continue 'outer;

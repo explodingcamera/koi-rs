@@ -16,9 +16,7 @@ pub enum ImageFormatType {
 }
 
 impl ImageFormatType {
-    pub fn get_impl<const C: usize, W: std::io::Write, R: std::io::Read>(
-        &self,
-    ) -> Box<dyn ImageFormat<W, R>> {
+    pub fn get_impl<const C: usize>(&self) -> Box<dyn ImageFormat> {
         match self {
             ImageFormatType::Png => Box::new(png::Png::<C>::new()),
             ImageFormatType::PngFast => Box::new(pngfast::PngFast::<C>::new()),
@@ -28,13 +26,10 @@ impl ImageFormatType {
         }
     }
 
-    pub fn get_impl_dyn<W: std::io::Write, R: std::io::Read>(
-        &self,
-        channels: usize,
-    ) -> Box<dyn ImageFormat<W, R>> {
+    pub fn get_impl_dyn(&self, channels: usize) -> Box<dyn ImageFormat> {
         match channels {
-            3 => self.get_impl::<3, _, _>(),
-            4 => self.get_impl::<4, _, _>(),
+            3 => self.get_impl::<3>(),
+            4 => self.get_impl::<4>(),
             _ => panic!("Unsupported number of channels"),
         }
     }
@@ -62,18 +57,18 @@ impl ImageFormatType {
     // }
 }
 
-pub trait ImageFormat<W: std::io::Write, R: std::io::Read> {
+pub trait ImageFormat {
     fn encode(
         &mut self,
-        data: R,
-        out: W,
+        data: &[u8],
+        out: &mut [u8],
         dimensions: (u32, u32), // (width, height)
     ) -> std::io::Result<()>;
 
     fn decode(
         &mut self,
-        data: R,
-        out: W,
+        data: &[u8],
+        out: &mut [u8],
         dimensions: (u32, u32), // (width, height)
     ) -> std::io::Result<()>;
 }

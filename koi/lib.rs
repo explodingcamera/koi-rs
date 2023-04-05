@@ -47,6 +47,17 @@ pub fn decode<WRITER: std::io::Write, READER: std::io::Read, const CHANNELS: usi
     Ok(header)
 }
 
+// pub fn decode_all<const C: usize>(
+//     data: &[u8],
+//     out: &mut [u8],
+// ) -> Result<(FileHeader, usize), QoirDecodeError> {
+//     let mut reader = std::io::Cursor::new(data);
+//     let header = file::FileHeader::read(&mut reader)?;
+
+//     let mut decoder =
+//         decoder::PixelDecoder::<_, C>::new_lz4(reader, (header.width * header.height) as usize);
+// }
+
 #[derive(Error, Debug)]
 pub enum QoirDecodeError {
     #[error("Invalid file header: {0}")]

@@ -13,8 +13,8 @@ impl<const C: usize> Koi<C> {
     }
 }
 
-impl<const C: usize, W: std::io::Write, R: std::io::Read> ImageFormat<W, R> for Koi<C> {
-    fn encode(&mut self, data: R, out: W, dimensions: (u32, u32)) -> Result<()> {
+impl<const C: usize> ImageFormat for Koi<C> {
+    fn encode(&mut self, data: &[u8], out: &mut [u8], dimensions: (u32, u32)) -> Result<()> {
         Ok(koi::encode::<_, _, C>(
             FileHeader::new(
                 None,
@@ -28,7 +28,7 @@ impl<const C: usize, W: std::io::Write, R: std::io::Read> ImageFormat<W, R> for 
         )?)
     }
 
-    fn decode(&mut self, data: R, out: W, _dimensions: (u32, u32)) -> Result<()> {
+    fn decode(&mut self, data: &[u8], out: &mut [u8], _dimensions: (u32, u32)) -> Result<()> {
         Ok(koi::decode::<_, _, C>(data, out).map(|_| ())?)
     }
 }
