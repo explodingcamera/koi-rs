@@ -1,5 +1,5 @@
 use lz4_flex::frame::FrameDecoder;
-use std::io::{self, BufReader, Read, Write};
+use std::io::{self, BufReader, Cursor, Read, Write};
 
 use super::reader::Reader;
 use crate::{
@@ -268,14 +268,16 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
         return Ok(buffer_in_pos + required_bytes + 1);
     }
 
-    pub fn read_all_pixels(&mut self, input: &[u8], output: &mut [u8]) -> io::Result<usize> {
-        let mut buffer_pos = 0;
+    pub fn read_all_pixels_buf(&mut self, input: &[u8], output: &mut [u8]) -> io::Result<usize> {
+        let mut input_decoded = Vec::with_capacity(input.len());
+        self.read_decoder.read_to_end(&mut input_decoded)?;
 
+        let mut buffer_pos = 0;
         while self.pixels_in < self.pixels_count {
-            let required_bytes = Self::get_required_bytes(input[buffer_pos]);
+            let required_bytes = Self::get_required_bytes(input_decoded[buffer_pos]);
 
             buffer_pos = self.read_pixel(
-                &input,
+                &input_decoded,
                 buffer_pos,
                 output,
                 self.pixels_in * C,

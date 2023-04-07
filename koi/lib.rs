@@ -14,17 +14,23 @@ pub mod types;
 pub mod util;
 pub fn run() {}
 
-pub fn encode<WRITER: std::io::Write, READER: std::io::Read, const CHANNELS: usize>(
+pub fn encode<
+    WRITER: std::io::Write,
+    READER: std::io::Read,
+    const CHANNELS: usize,
+    const COMPRESSION: u8,
+>(
     header: file::FileHeader,
     reader: READER, // unbuffered reader, if you want to use a buffered reader (e.g. when reading a file), wrap it in a BufReader
     mut writer: WRITER,
 ) -> Result<(), QoirEncodeError> {
     header.write(&mut writer)?;
 
-    let mut encoder = encoder::PixelEncoder::<WRITER, CHANNELS>::new_lz4(
-        writer,
-        (header.width * header.height) as usize,
-    );
+    let mut encoder = match COMPRESSION {
+        0 => encoder::PixelEncoder::<WRITER, CHANNELS>::new_uncompressed,
+        1 => encoder::PixelEncoder::<WRITER, CHANNELS>::new_lz4,
+        _ => panic!("Invalid compression type. Valid values are 0 (uncompressed) and 1 (lz4)"),
+    }(writer, (header.width * header.height) as usize);
 
     encoder.encode(reader)?;
     encoder.flush()?;
@@ -38,10 +44,10 @@ pub fn decode<WRITER: std::io::Write, READER: std::io::Read, const CHANNELS: usi
 ) -> Result<FileHeader, QoirDecodeError> {
     let header = file::FileHeader::read(&mut reader)?;
 
-    let mut decoder = decoder::PixelDecoder::<READER, CHANNELS>::new_lz4(
-        reader,
-        (header.width * header.height) as usize,
-    );
+    let mut decoder = match header.compression {
+        types::Compression::None => decoder::PixelDecoder::<READER, CHANNELS>::new_uncompressed,
+        types::Compression::Lz4 => decoder::PixelDecoder::<READER, CHANNELS>::new_lz4,
+    }(reader, (header.width * header.height) as usize);
 
     decoder.decode(&mut writer)?;
     Ok(header)

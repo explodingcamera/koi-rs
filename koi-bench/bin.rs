@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::hint::black_box;
+use std::io::Write;
 use std::{io, time::Instant};
 use strum::IntoEnumIterator;
 
@@ -17,7 +18,7 @@ use crate::util::from_png;
 static RUNS: usize = 4;
 
 fn main() -> io::Result<()> {
-    let mut suites = generate_test_suites("images");
+    let mut suites = generate_test_suites("images2");
 
     println!(
         " \x1b[1mRunning benchmarks\x1b[0m ({} runs per image)",
@@ -145,9 +146,9 @@ fn run_test(
             let mut out = Vec::with_capacity(input.len());
             let mut encoder = format.get_impl_dyn(channels);
             let start = Instant::now();
-            if let Err(_e) = encoder.encode(black_box(input), black_box(&mut out), (width, height))
-            {
-                // println!("Error encoding {format}, skipping: {e}");
+
+            if let Err(e) = encoder.encode(black_box(input), black_box(&mut out), (width, height)) {
+                println!("Error encoding {format}, skipping: {e}");
                 errored = true;
                 continue 'outer;
             }
@@ -159,7 +160,6 @@ fn run_test(
             }
         }
 
-        // println!("encoded {} bytes", output.len());
         let encode_size = output.len();
 
         // DECODE
@@ -169,12 +169,11 @@ fn run_test(
             let data = output.clone();
 
             let mut decoder = format.get_impl_dyn(channels);
-            let mut out = Vec::with_capacity(channels * (width * height) as usize);
+            let mut out = Vec::with_capacity(input.len());
             let start = Instant::now();
 
-            if let Err(_e) = decoder.decode(black_box(&data), black_box(&mut out), (width, height))
-            {
-                // println!("Error decoding {format}, skipping: {e}");
+            if let Err(e) = decoder.decode(black_box(&data), black_box(&mut out), (width, height)) {
+                println!("Error decoding {format}, skipping: {e}");
                 errored = true;
                 continue 'outer;
             }

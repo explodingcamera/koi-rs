@@ -1,6 +1,5 @@
 pub mod koi;
 pub mod png;
-pub mod pngfast;
 pub mod qoi;
 pub mod webp;
 
@@ -10,19 +9,19 @@ use strum_macros::{Display, EnumIter};
 pub enum ImageFormatType {
     Png,
     PngFast,
-    Koi,
-    // QOI,
-    // WEBP,
+    // Koi,
+    KoiLz4,
+    Qoi,
 }
 
 impl ImageFormatType {
     pub fn get_impl<const C: usize>(&self) -> Box<dyn ImageFormat> {
         match self {
             ImageFormatType::Png => Box::new(png::Png::<C>::new()),
-            ImageFormatType::PngFast => Box::new(pngfast::PngFast::<C>::new()),
-            ImageFormatType::Koi => Box::new(koi::Koi::<C>::new()),
-            // ImageFormatType::QOI => Box::new(qoi::Qoi::<C>::new()),
-            // ImageFormatType::WEBP => Box::new(webp::Webp::<C>::new()),
+            ImageFormatType::PngFast => Box::new(png::PngFast::<C>::new()),
+            // ImageFormatType::Koi => Box::new(koi::Koi::<C>::new()),
+            ImageFormatType::KoiLz4 => Box::new(koi::KoiLz4::<C>::new()),
+            ImageFormatType::Qoi => Box::new(qoi::Qoi::<C>::new()),
         }
     }
 
@@ -61,14 +60,14 @@ pub trait ImageFormat {
     fn encode(
         &mut self,
         data: &[u8],
-        out: &mut [u8],
+        out: &mut Vec<u8>,
         dimensions: (u32, u32), // (width, height)
     ) -> std::io::Result<()>;
 
     fn decode(
         &mut self,
         data: &[u8],
-        out: &mut [u8],
+        out: &mut Vec<u8>,
         dimensions: (u32, u32), // (width, height)
     ) -> std::io::Result<()>;
 }

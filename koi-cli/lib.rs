@@ -30,7 +30,7 @@ pub fn run() {
         Compression::None,
     );
 
-    encode::<_, _, CHANNELS>(header, &test_image[..], &mut out).expect("Failed to encode");
+    encode::<_, _, CHANNELS, 1>(header, &test_image[..], &mut out).expect("Failed to encode");
 
     let encoded_file = BufReader::new(File::open("test.koi").expect("Failed to open file"));
     let mut decoded_file = Vec::with_capacity((width * height * (CHANNELS as u32)) as usize);
