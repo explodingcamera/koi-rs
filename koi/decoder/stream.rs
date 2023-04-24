@@ -1,5 +1,5 @@
 use lz4_flex::frame::FrameDecoder;
-use std::io::{self, BufReader, Cursor, Read, Write};
+use std::io::{self, BufReader, Read, Write};
 
 use super::reader::Reader;
 use crate::{
@@ -185,7 +185,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
             }
 
             buffer_pos =
-                self.read_pixel(&mut buffer, buffer_pos, buf, buffer_offset, required_bytes)?;
+                self.read_pixel(&buffer, buffer_pos, buf, buffer_offset, required_bytes)?;
             pixels_read += 1;
         }
 
@@ -265,7 +265,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
         self.last_px = pixel;
         self.cache[pixel_hash(pixel) as usize] = pixel;
 
-        return Ok(buffer_in_pos + required_bytes + 1);
+        Ok(buffer_in_pos + required_bytes + 1)
     }
 
     pub fn read_all_pixels_buf(&mut self, input: &[u8], output: &mut [u8]) -> io::Result<usize> {

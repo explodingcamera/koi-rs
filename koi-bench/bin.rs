@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::hint::black_box;
-use std::io::Write;
 use std::{io, time::Instant};
 use strum::IntoEnumIterator;
 

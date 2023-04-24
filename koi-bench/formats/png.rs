@@ -24,7 +24,7 @@ impl<const C: usize> ImageFormat for Png<C> {
 
         encoder.set_depth(png::BitDepth::Eight);
         let mut writer = encoder.write_header()?;
-        writer.write_image_data(&data)?;
+        writer.write_image_data(data)?;
 
         Ok(())
     }
@@ -35,7 +35,7 @@ impl<const C: usize> ImageFormat for Png<C> {
         mut _out: &mut Vec<u8>,
         _dimensions: (u32, u32),
     ) -> Result<()> {
-        let decoder = png::Decoder::new(&data[..]);
+        let decoder = png::Decoder::new(data);
         let mut reader = decoder.read_info()?;
         let mut out = vec![0; reader.output_buffer_size()];
         reader.next_frame(&mut out)?;
@@ -66,7 +66,7 @@ impl<const C: usize> ImageFormat for PngFast<C> {
 
         encoder.set_depth(png::BitDepth::Eight);
         let mut writer = encoder.write_header()?;
-        writer.write_image_data(&data)?;
+        writer.write_image_data(data)?;
 
         Ok(())
     }
@@ -77,7 +77,7 @@ impl<const C: usize> ImageFormat for PngFast<C> {
         mut _out: &mut Vec<u8>,
         _dimensions: (u32, u32),
     ) -> Result<()> {
-        let decoder = png::Decoder::new(&data[..]);
+        let decoder = png::Decoder::new(data);
         let mut reader = decoder.read_info()?;
         let mut out = vec![0; reader.output_buffer_size()];
         reader.next_frame(&mut out)?;

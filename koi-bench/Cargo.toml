@@ -10,7 +10,7 @@ path = "bin.rs"
 [dependencies]
 indicatif = "0.17"
 koi = {path = "../koi"}
-png = "0.17.8-rc"
+png = "0.17.8"
 qoi = "0.4"
 strum = "0.24"
 strum_macros = "0.24"

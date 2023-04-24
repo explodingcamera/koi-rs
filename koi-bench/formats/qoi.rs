@@ -19,7 +19,7 @@ impl<const C: usize> ImageFormat for Qoi<C> {
     }
 
     fn decode(&mut self, data: &[u8], out: &mut Vec<u8>, _dimensions: (u32, u32)) -> Result<()> {
-        (_, *out) = qoi::decode_to_vec(&mut data.to_vec())
+        (_, *out) = qoi::decode_to_vec(data)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
         Ok(())

@@ -163,7 +163,7 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
     #[inline]
     fn write_aligned(&mut self, buf: &[u8]) -> std::io::Result<()> {
         for chunk in buf.chunks_exact(C) {
-            let curr_pixel = RgbaColor::from_channels::<C>(&chunk);
+            let curr_pixel = RgbaColor::from_channels::<C>(chunk);
             self.encode_pixel(curr_pixel, self.prev_pixel)?;
             self.prev_pixel = curr_pixel;
         }
