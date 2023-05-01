@@ -1,7 +1,7 @@
 use super::writer::Writer;
 use crate::{
     types::{color_diff, luma_diff, Channels, Op, RgbaColor, CACHE_SIZE, END_OF_IMAGE},
-    util::{pixel_hash, unlikely},
+    util::pixel_hash,
 };
 use lz4_flex::frame::FrameEncoder;
 use std::io::{self, Read, Write};
@@ -51,7 +51,7 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         frame_info.content_size = Some((pixels_count * C) as u64);
 
         Self::new(
-            Writer::Lz4Encoder(Box::new(FrameEncoder::with_frame_info(frame_info, writer))),
+            Writer::Lz4Encoder(FrameEncoder::with_frame_info(frame_info, writer)),
             pixels_count,
         )
     }
@@ -92,7 +92,7 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
                 self.writer
                     .write_all(&[Op::GrayAlpha as u8, curr_pixel.0[0], curr_pixel.0[3]])?;
             } else {
-                if unlikely(C != Channels::Rgba as u8 as usize) {
+                if C != Channels::Rgba as u8 as usize {
                     panic!("RGBA encoding is only supported for RGBA images");
                 }
 

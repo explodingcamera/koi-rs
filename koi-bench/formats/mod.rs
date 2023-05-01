@@ -7,20 +7,22 @@ use strum_macros::{Display, EnumIter};
 
 #[derive(Debug, Display, EnumIter, PartialEq, Eq, Hash, Ord, PartialOrd, Clone, Copy)]
 pub enum ImageFormatType {
-    Png,
-    PngFast,
+    // Png,
+    // PngFast,
     // Koi,
     KoiLz4,
+    // Koi2,
     Qoi,
 }
 
 impl ImageFormatType {
     pub fn get_impl<const C: usize>(&self) -> Box<dyn ImageFormat> {
         match self {
-            ImageFormatType::Png => Box::new(png::Png::<C>::new()),
-            ImageFormatType::PngFast => Box::new(png::PngFast::<C>::new()),
+            // ImageFormatType::Png => Box::new(png::Png::<C>::new()),
+            // ImageFormatType::PngFast => Box::new(png::PngFast::<C>::new()),
             // ImageFormatType::Koi => Box::new(koi::Koi::<C>::new()),
-            ImageFormatType::KoiLz4 => Box::new(koi::KoiLz4::<C>::new()),
+            ImageFormatType::KoiLz4 => Box::new(koi::KoiLz4::<C> {}),
+            // ImageFormatType::Koi2 => Box::new(koi::Koi2::<C> {}),
             ImageFormatType::Qoi => Box::new(qoi::Qoi::<C>::new()),
         }
     }
@@ -60,14 +62,12 @@ pub trait ImageFormat {
     fn encode(
         &mut self,
         data: &[u8],
-        out: &mut Vec<u8>,
         dimensions: (u32, u32), // (width, height)
-    ) -> std::io::Result<()>;
+    ) -> std::io::Result<Vec<u8>>;
 
     fn decode(
         &mut self,
         data: &[u8],
-        out: &mut Vec<u8>,
         dimensions: (u32, u32), // (width, height)
-    ) -> std::io::Result<()>;
+    ) -> std::io::Result<Vec<u8>>;
 }

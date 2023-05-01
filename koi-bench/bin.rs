@@ -141,37 +141,36 @@ fn run_test(
         // println!("encoding {format}...");
         let mut shortest_encode: u128 = u128::MAX;
         let mut output = Vec::new();
+
         for r in 0..RUNS {
-            let mut out = Vec::with_capacity(input.len());
             let mut encoder = format.get_impl_dyn(channels);
             let start = Instant::now();
 
-            if let Err(e) = encoder.encode(black_box(input), black_box(&mut out), (width, height)) {
-                println!("Error encoding {format}, skipping: {e}");
-                errored = true;
-                continue 'outer;
-            }
-            shortest_encode = std::cmp::min(shortest_encode, start.elapsed().as_micros());
+            let out = match encoder.encode(black_box(input), (width, height)) {
+                Err(e) => {
+                    println!("Error encoding {format}, skipping: {e}");
+                    errored = true;
+                    continue 'outer;
+                }
+                Ok(out) => out,
+            };
 
+            shortest_encode = std::cmp::min(shortest_encode, start.elapsed().as_micros());
             if r == 0 {
-                drop(encoder);
                 output = out;
             }
         }
-
         let encode_size = output.len();
 
         // DECODE
         // println!("decoding {format}...");
         let mut shortest_decode: u128 = u128::MAX;
         for _ in 0..RUNS {
-            let data = output.clone();
-
             let mut decoder = format.get_impl_dyn(channels);
-            let mut out = Vec::with_capacity(input.len());
+            let mut out = vec![0; input.len() * 2];
             let start = Instant::now();
 
-            if let Err(e) = decoder.decode(black_box(&data), black_box(&mut out), (width, height)) {
+            if let Err(e) = decoder.decode(black_box(&output), (width, height)) {
                 println!("Error decoding {format}, skipping: {e}");
                 errored = true;
                 continue 'outer;

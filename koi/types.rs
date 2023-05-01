@@ -133,6 +133,7 @@ pub fn luma_diff(diff: (u8, u8, u8)) -> Option<[u8; 2]> {
 pub enum Compression {
     None = 0,
     Lz4 = 1,
+    Lz4b = 2,
 }
 
 #[derive(IntoPrimitive, Copy, Clone, TryFromPrimitive, Debug)]

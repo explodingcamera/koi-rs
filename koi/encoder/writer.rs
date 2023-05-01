@@ -1,8 +1,9 @@
 use lz4_flex::frame::FrameEncoder;
 use std::io::Write;
 
+#[allow(clippy::large_enum_variant)]
 pub enum Writer<W: Write> {
-    Lz4Encoder(Box<FrameEncoder<W>>),
+    Lz4Encoder(FrameEncoder<W>),
     UncompressedEncoder(W), // FrameEncoder already buffers internally, so for consistency we also use BufWriter here
 }
 

@@ -42,11 +42,12 @@ pub fn decode<WRITER: std::io::Write, READER: std::io::Read, const CHANNELS: usi
     mut reader: READER,
     mut writer: WRITER,
 ) -> Result<FileHeader, QoirDecodeError> {
-    let header = file::FileHeader::read(&mut reader)?;
+    let header = file::FileHeader::parse(&mut reader)?;
 
     let mut decoder = match header.compression {
         types::Compression::None => decoder::PixelDecoder::<READER, CHANNELS>::new_uncompressed,
         types::Compression::Lz4 => decoder::PixelDecoder::<READER, CHANNELS>::new_lz4,
+        types::Compression::Lz4b => panic!("Lz4b is not supported yet"),
     }(reader, (header.width * header.height) as usize);
 
     decoder.decode(&mut writer)?;

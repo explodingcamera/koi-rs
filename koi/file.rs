@@ -42,9 +42,7 @@ impl FileHeader {
         }
     }
 
-    pub fn write<W: Write>(&self, writer: &mut W) -> Result<(), QoirEncodeError> {
-        writer.write_all(&MAGIC)?;
-
+    fn doc(&self) -> Document {
         let mut doc = Document::new();
         doc.insert("v", self.version as i32);
         doc.insert("w", self.width as i32);
@@ -56,7 +54,21 @@ impl FileHeader {
             doc.insert("e", to_binary(exif.clone()));
         }
 
-        Ok(doc.to_writer(writer)?)
+        doc
+    }
+
+    pub fn write<W: Write>(&self, writer: &mut W) -> Result<(), QoirEncodeError> {
+        writer.write_all(&MAGIC)?;
+        Ok(self.doc().to_writer(writer)?)
+    }
+
+    pub fn write_to_buf(&self, buf: &mut [u8]) -> Result<usize, QoirEncodeError> {
+        buf[..MAGIC.len()].copy_from_slice(&MAGIC);
+
+        let mut header = vec![];
+        self.doc().to_writer(&mut header)?;
+        buf[MAGIC.len()..MAGIC.len() + header.len()].copy_from_slice(&header);
+        Ok(header.len() + MAGIC.len())
     }
 
     pub fn check_magic(reader: &mut dyn Read) -> Result<(), QoirDecodeError> {
@@ -74,7 +86,7 @@ impl FileHeader {
         Ok(())
     }
 
-    pub fn read(reader: &mut dyn Read) -> Result<FileHeader, QoirDecodeError> {
+    pub fn parse(reader: &mut dyn Read) -> Result<FileHeader, QoirDecodeError> {
         FileHeader::check_magic(reader)?;
 
         let doc = Document::from_reader(reader).map_err(err("Failed to read file header"))?;
