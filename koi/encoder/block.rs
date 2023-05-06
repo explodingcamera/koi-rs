@@ -1,17 +1,15 @@
 use core::slice;
-use std::io::Cursor;
 
 use bytes::{BufMut, BytesMut};
 
 use crate::{
     file::FileHeader,
-    types::{color_diff, luma_diff, Channels, Op, Pixel, CACHE_SIZE},
+    types::{color_diff, luma_diff, Channels, Op, Pixel},
     QoirEncodeError,
 };
 
 // has to be devisible by 1, 2, 3 and 4 so chunks_exact works properly
-// less than 64k tp fit into u16
-const CHUNK_SIZE: usize = 64 * 1024 - 4;
+const CHUNK_SIZE: usize = 199992; // about 200kb
 
 enum PixelEncoding {
     Index([u8; 2]),
@@ -109,18 +107,18 @@ impl PixelEncoding {
 }
 
 #[inline(always)]
-fn encode_px<const C: usize>(
+fn encode_px<'a, const C: usize>(
     curr_pixel: Pixel<C>,
     cache: &mut [Pixel<C>; 256],
-    prev_pixel: &mut Pixel<C>,
+    prev_pixel: Pixel<C>,
 ) -> PixelEncoding {
     // index encoding
-    let hash_prev = prev_pixel.hash();
-    let index_px = cache[hash_prev as usize];
-    if index_px == curr_pixel {
-        return PixelEncoding::Index([u8::from(Op::Index) | hash_prev, 0]);
+    let hash = curr_pixel.hash();
+    let index_px = cache[hash as usize];
+    if index_px == prev_pixel {
+        return PixelEncoding::Index([u8::from(Op::Index) | hash, 0]);
     }
-    cache[hash_prev as usize] = curr_pixel;
+    cache[hash as usize] = curr_pixel;
 
     // alpha diff encoding (whenever only alpha channel changes)
     if C > 3 && curr_pixel.a() == prev_pixel.a() {
@@ -151,7 +149,7 @@ fn encode_px<const C: usize>(
     }
 
     // Difference between current and previous pixel
-    let diff = curr_pixel.diff(prev_pixel);
+    let diff = curr_pixel.diff(&prev_pixel);
 
     // Diff encoding
     if let Some(diff) = color_diff(diff) {
@@ -201,22 +199,14 @@ pub fn encode<const C: usize>(
         let mut chunk_bytes_written = 0;
 
         for px in chunk.chunks_exact(C) {
+            // Safety: we know that px.len() == C, can be removed when array_exact is stable
             let px = unsafe { px.try_into().unwrap_unchecked() };
             let curr_pixel = Pixel::from_channels::<C>(px);
-            let encoded_px = encode_px::<C>(curr_pixel, &mut cache, &mut prev_pixel);
+            let encoded_px = encode_px::<C>(curr_pixel, &mut cache, prev_pixel);
 
             prev_pixel = curr_pixel;
             chunk_bytes_written += encoded_px.write_to_buf(&mut out_chunk[chunk_bytes_written..]);
         }
-
-        // for px in  {
-        //     let curr_pixel = RgbaColor::from_channels::<CHANNELS>(px);
-        //     let encoded_px = encode_px::<CHANNELS>(curr_pixel, &mut cache, &mut prev_pixel);
-        //     prev_pixel = curr_pixel;
-        //     // chunk_bytes_written += encoded_px.write_to_buf(&mut out_chunk[chunk_bytes_written..]);
-        //     out_chunk
-        //         .extend_from_slice(encoded_px.write_to_buf(&mut out_chunk[chunk_bytes_written..]));
-        // }
 
         bytes_written += lz4_flex::block::compress_into(
             out_chunk[..chunk_bytes_written].as_ref(),

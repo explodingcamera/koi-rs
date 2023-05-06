@@ -1,8 +1,5 @@
-use std::ops::{Deref, DerefMut};
-
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-
-use crate::util::unlikely;
+use std::ops::{Deref, DerefMut};
 
 // magic number to identify koi files
 pub const MAGIC: [u8; 8] = *b"KOI \xF0\x9F\x99\x82";
@@ -35,26 +32,34 @@ pub enum Op {
     Rgb = OP_RGB,
     Rgba = OP_RGBA,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Pixel<const C: usize>([u8; C]);
+#[derive(Debug, Clone, Copy)]
+pub struct Pixel<const C: usize> {
+    data: [u8; C],
+}
+
+impl<const C: usize> PartialEq for Pixel<C> {
+    fn eq(&self, other: &Self) -> bool {
+        self.data[..] == other.data[..]
+    }
+}
 
 impl<const C: usize> Deref for Pixel<C> {
     type Target = [u8; C];
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.data
     }
 }
 
 impl<const C: usize> DerefMut for Pixel<C> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.data
     }
 }
 
 impl<const C: usize> Default for Pixel<C> {
     fn default() -> Self {
-        Pixel([255; C])
+        Pixel { data: [255; C] }
     }
 }
 
@@ -80,69 +85,73 @@ impl<const C: usize, const C2: usize> From<[u8; C2]> for Pixel<C> {
 
 impl<const C: usize> From<Pixel<C>> for [u8; C] {
     fn from(px: Pixel<C>) -> Self {
-        px.0
+        px.data
     }
 }
 
 impl<const C: usize> From<&[u8]> for Pixel<C> {
     fn from(data: &[u8]) -> Self {
         let mut px = Pixel::default();
-        px.0[..data.len()].copy_from_slice(data);
+        px.data[..data.len()].copy_from_slice(data);
         px
     }
 }
 
 impl<const C: usize> Pixel<C> {
+    pub fn rgb(&self) -> [u8; 3] {
+        [self.r(), self.g(), self.b()]
+    }
+
     pub fn r(&self) -> u8 {
         match C {
-            3 => self.0[0],
-            4 => self.0[0],
-            2 => self.0[0],
-            1 => self.0[0],
+            3 => self.data[0],
+            4 => self.data[0],
+            2 => self.data[0],
+            1 => self.data[0],
             _ => unreachable!(),
         }
     }
 
     pub fn g(&self) -> u8 {
         match C {
-            3 => self.0[0],
-            4 => self.0[1],
-            2 => self.0[0],
-            1 => self.0[0],
+            3 => self.data[0],
+            4 => self.data[1],
+            2 => self.data[0],
+            1 => self.data[0],
             _ => unreachable!(),
         }
     }
 
     pub fn b(&self) -> u8 {
         match C {
-            3 => self.0[2],
-            4 => self.0[2],
-            2 => self.0[0],
-            1 => self.0[0],
+            3 => self.data[2],
+            4 => self.data[2],
+            2 => self.data[0],
+            1 => self.data[0],
             _ => unreachable!(),
         }
     }
 
     pub fn a(&self) -> u8 {
         match C {
-            4 => self.0[3],
+            4 => self.data[3],
             3 => 0xff,
-            2 => self.0[1],
+            2 => self.data[1],
             1 => 0xff,
             _ => unreachable!(),
         }
     }
 
     pub fn read(&mut self, bytes: &[u8]) {
-        self.0.copy_from_slice(&bytes);
+        self.data.copy_from_slice(&bytes);
     }
 
     pub fn get(&self) -> &[u8; C] {
-        &self.0
+        &self.data
     }
 
     pub fn read_const(&mut self, bytes: [u8; C]) {
-        self.0.copy_from_slice(&bytes);
+        self.data.copy_from_slice(&bytes);
     }
 
     pub fn from_rgb([r, g, b]: [u8; 3]) -> Self {
@@ -151,7 +160,7 @@ impl<const C: usize> Pixel<C> {
 
     pub fn from_channels<const C2: usize>(channels: [u8; C2]) -> Self {
         let mut px = Pixel::default();
-        px.0[..C2].copy_from_slice(&channels);
+        px.data[..C2].copy_from_slice(&channels);
         px
     }
 
@@ -166,16 +175,15 @@ impl<const C: usize> Pixel<C> {
     }
 
     pub fn is_gray(&self) -> bool {
-        // self.0[0] != self.0[1] || self.0[1] != self.0[2]
         match C {
-            4 | 3 => self.0[0] != self.0[1] || self.0[1] != self.0[2],
+            4 | 3 => self.data[0] == self.data[1] && self.data[1] == self.data[2],
             2 | 1 => true,
             _ => unreachable!(),
         }
     }
 
     pub fn to_u32(&self) -> u32 {
-        u32::from_be_bytes([self.0[0], self.0[1], self.0[2], self.0[3]])
+        u32::from_be_bytes([self.data[0], self.data[1], self.data[2], self.data[3]])
     }
 
     pub fn from_u32(color: u32) -> Self {
@@ -183,9 +191,9 @@ impl<const C: usize> Pixel<C> {
     }
 
     pub fn diff(&self, other: &Self) -> (u8, u8, u8) {
-        let r = self.0[0].wrapping_sub(other.0[0]);
-        let g = self.0[1].wrapping_sub(other.0[1]);
-        let b = self.0[2].wrapping_sub(other.0[2]);
+        let r = self.data[0].wrapping_sub(other.data[0]);
+        let g = self.data[1].wrapping_sub(other.data[1]);
+        let b = self.data[2].wrapping_sub(other.data[2]);
         (r, g, b)
     }
 
@@ -203,7 +211,7 @@ impl<const C: usize> Pixel<C> {
     pub fn apply_alpha_diff(&self, op: u8) -> Self {
         let diff = (op & !(Op::DiffAlpha as u8)).wrapping_sub(0x1e);
         let new_alpha = self.a().wrapping_add(diff);
-        // RgbaColor([self.0[0], self.0[1], self.0[2], new_alpha])
+        // RgbaColor([self.data[0], self.data[1], self.data[2], new_alpha])
         [self.r(), self.g(), self.b(), new_alpha].into()
     }
 
@@ -227,17 +235,19 @@ impl<const C: usize> Pixel<C> {
     }
 
     #[inline]
-    pub fn hash(&self) -> u8 {
+    pub fn hash(self) -> u8 {
         // index_position = (r * 3 + g * 5 + b * 7 + a * 11) % 64
         let (r, g, b, a) = match C {
-            4 => (self.0[0], self.0[1], self.0[2], self.0[3]),
-            3 => (self.0[0], self.0[1], self.0[2], 0xff),
-            2 => (self.0[0], self.0[0], self.0[0], self.0[1]),
-            1 => (self.0[0], self.0[0], self.0[0], 0xff),
+            4 => (self.data[0], self.data[1], self.data[2], self.data[3]),
+            3 => (self.data[0], self.data[1], self.data[2], 0xff),
+            2 => (self.data[0], self.data[0], self.data[0], self.data[1]),
+            1 => (self.data[0], self.data[0], self.data[0], 0xff),
             _ => unreachable!(),
         };
 
-        ((r as u32 * 3 + g as u32 * 5 + b as u32 * 7 + a as u32 * 11) % CACHE_SIZE as u32) as u8
+        let x = ((r as u32 * 3 + g as u32 * 5 + b as u32 * 7 + a as u32 * 11) % CACHE_SIZE as u32)
+            as u8;
+        x
     }
 }
 

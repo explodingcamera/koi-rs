@@ -78,7 +78,7 @@ impl FileHeader {
         Ok(bytes)
     }
 
-    pub fn write_to_bytes(&self, mut bytes: &mut BytesMut) -> Result<(), QoirEncodeError> {
+    pub fn write_to_bytes(&self, bytes: &mut BytesMut) -> Result<(), QoirEncodeError> {
         bytes.put(&MAGIC[..]);
         bytes.put(&self.write_to_vec()?[..]);
         Ok(())

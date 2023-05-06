@@ -77,7 +77,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
             let [b1] = self.read_decoder.read_bytes::<1>()?;
             let buffer_offset = i * C;
 
-            let pixel: Pixel<C> = match b1 {
+            let mut pixel: Pixel<C> = match b1 {
                 OP_INDEX..=OP_INDEX_END => {
                     self.last_px = self.cache[b1 as usize];
                     buf[buffer_offset..buffer_offset + C].copy_from_slice(self.last_px.get());
@@ -224,14 +224,16 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
     ) -> io::Result<usize> {
         let b1 = buf_in[buffer_in_pos];
 
-        let pixel: Pixel<C> = match b1 {
+        let mut pixel: Pixel<C> = match b1 {
             OP_INDEX..=OP_INDEX_END => {
+                // println!("OP_INDEX");
                 self.last_px = self.cache[b1 as usize];
                 buf_out[buffer_offset..buffer_offset + C].copy_from_slice(self.last_px.get());
                 self.pixels_in += 1;
                 return Ok(buffer_in_pos + 1);
             }
             OP_GRAY => {
+                // println!("OP_GRAY");
                 let b2 = buf_in[buffer_in_pos + 1];
                 Pixel::from_grayscale(b2)
             }

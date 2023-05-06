@@ -70,7 +70,7 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         }
 
         // alpha diff encoding (whenever only alpha channel changes)
-        if curr_pixel.a() == prev_pixel.a() {
+        if (C == 2 || C == 4) && curr_pixel.rgb() == prev_pixel.rgb() {
             if let Some(diff) = prev_pixel.alpha_diff(&curr_pixel) {
                 self.cache_pixel(&mut curr_pixel, hash);
                 self.writer.write_one(diff)?;
