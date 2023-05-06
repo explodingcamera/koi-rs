@@ -1,7 +1,3 @@
-use core::slice;
-
-use bytes::{BufMut, BytesMut};
-
 use crate::{
     file::FileHeader,
     types::{color_diff, luma_diff, Channels, Op, Pixel},
@@ -23,50 +19,6 @@ enum PixelEncoding {
 }
 
 impl PixelEncoding {
-    #[inline]
-    fn as_bytes(&self) -> &[u8] {
-        match self {
-            PixelEncoding::Index(data) => data,
-            PixelEncoding::Diff(data) => slice::from_ref(data),
-            PixelEncoding::AlphaDiff(data) => slice::from_ref(data),
-            PixelEncoding::LumaDiff(data) => data,
-            PixelEncoding::Gray(data) => data,
-            PixelEncoding::GrayAlpha(data) => data,
-            PixelEncoding::Rgba(data) => data,
-            PixelEncoding::Rgb(data) => data,
-        }
-    }
-
-    #[inline]
-    fn write_to_bytes(&self, bytes: &mut BytesMut) {
-        match self {
-            PixelEncoding::Index(data) => {
-                bytes.put(&data[..]);
-            }
-            PixelEncoding::Diff(data) => {
-                bytes.put_u8(*data);
-            }
-            PixelEncoding::AlphaDiff(data) => {
-                bytes.put_u8(*data);
-            }
-            PixelEncoding::LumaDiff(data) => {
-                bytes.put(&data[..]);
-            }
-            PixelEncoding::Gray(data) => {
-                bytes.put(&data[..]);
-            }
-            PixelEncoding::GrayAlpha(data) => {
-                bytes.put(&data[..]);
-            }
-            PixelEncoding::Rgba(data) => {
-                bytes.put(&data[..]);
-            }
-            PixelEncoding::Rgb(data) => {
-                bytes.put(&data[..]);
-            }
-        }
-    }
-
     #[inline]
     fn write_to_buf(&self, buf: &mut [u8]) -> usize {
         match self {
@@ -107,7 +59,7 @@ impl PixelEncoding {
 }
 
 #[inline(always)]
-fn encode_px<'a, const C: usize>(
+fn encode_px<const C: usize>(
     curr_pixel: Pixel<C>,
     cache: &mut [Pixel<C>; 256],
     prev_pixel: Pixel<C>,
@@ -194,14 +146,13 @@ pub fn encode<const C: usize>(
     let mut bytes_written = header.write_to_buf(out)?;
     let mut prev_pixel = Pixel::default();
 
-    let mut out_chunk = [0; CHUNK_SIZE];
+    let mut out_chunk = [0; (CHUNK_SIZE * 4) / 3];
     for chunk in data.chunks(CHUNK_SIZE) {
         let mut chunk_bytes_written = 0;
 
         for px in chunk.chunks_exact(C) {
             // Safety: we know that px.len() == C, can be removed when array_exact is stable
-            let px = unsafe { px.try_into().unwrap_unchecked() };
-            let curr_pixel = Pixel::from_channels::<C>(px);
+            let curr_pixel = px.into();
             let encoded_px = encode_px::<C>(curr_pixel, &mut cache, prev_pixel);
 
             prev_pixel = curr_pixel;

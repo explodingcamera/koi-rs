@@ -164,7 +164,7 @@ fn run_test(
 
         // DECODE
         // println!("decoding {format}...");
-        let mut shortest_decode: u128 = u128::MAX;
+        let shortest_decode: u128 = u128::MAX;
         // for _ in 0..RUNS {
         //     let mut decoder = format.get_impl_dyn(channels);
         //     let start = Instant::now();

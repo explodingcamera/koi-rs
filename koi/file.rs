@@ -5,7 +5,6 @@ use crate::{
     QoirDecodeError, QoirEncodeError,
 };
 use bson::{Binary, Document};
-use bytes::{BufMut, BytesMut};
 
 #[derive(Debug, Clone)]
 pub struct FileHeader {
@@ -78,12 +77,6 @@ impl FileHeader {
         Ok(bytes)
     }
 
-    pub fn write_to_bytes(&self, bytes: &mut BytesMut) -> Result<(), QoirEncodeError> {
-        bytes.put(&MAGIC[..]);
-        bytes.put(&self.write_to_vec()?[..]);
-        Ok(())
-    }
-
     pub fn check_magic(reader: &mut dyn Read) -> Result<(), QoirDecodeError> {
         let mut magic = [0u8; MAGIC.len()];
         reader.read_exact(&mut magic).map_err(|_| {
@@ -124,7 +117,10 @@ impl FileHeader {
                 .map_err(err("Invalid channels"))?
                 .try_into()
                 .map_err(err("Invalid channels"))?,
-            compression: compression.try_into().map_err(err("Invalid compression"))?,
+            compression: u8::try_from(compression)
+                .map_err(err("Invalid compression"))?
+                .try_into()
+                .map_err(err("Invalid compression"))?,
         })
     }
 }

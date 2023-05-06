@@ -1,4 +1,4 @@
 mod stream;
 mod writer;
-pub use stream::*;
+pub use stream::PixelEncoder;
 pub mod block;

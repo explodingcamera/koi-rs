@@ -3,13 +3,6 @@ use crate::types::{color_diff, luma_diff, Channels, Op, Pixel, CACHE_SIZE, END_O
 use lz4_flex::frame::FrameEncoder;
 use std::io::{self, Read, Write};
 
-// pub struct PixelEncoderConfig {
-//     pub index_encoding: bool,
-//     pub diff_encoding: bool,
-//     pub luma_encoding: bool,
-//     pub alpha_diff_encoding: bool,
-// }
-
 // PixelEncoder is a stream encoder that encodes pixels one by one
 // - Writer is a wrapper around the underlying writer that can be either a lz4 encoder or a regular writer
 // - C is the number of channels in the image
@@ -158,6 +151,7 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
     fn write_aligned(&mut self, buf: &[u8]) -> std::io::Result<()> {
         for chunk in buf.chunks_exact(C) {
             let curr_pixel: Pixel<C> = chunk.into();
+
             self.encode_pixel(curr_pixel, self.prev_pixel)?;
             self.prev_pixel = curr_pixel;
         }
@@ -174,8 +168,6 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
 impl<W: Write, const C: usize> Write for PixelEncoder<W, C> {
     // Currently always buffers C bytes before encoding a pixel, this could be improved by only buffering the remaining bytes until the next pixel boundary is reached
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        // println!("buf.len(): {}", buf.len());
-
         // append the remainder from the previous write to the beginning of the buffer
         if !self.remainder.is_empty() {
             let mut new_buf = self.remainder.clone();
@@ -186,13 +178,7 @@ impl<W: Write, const C: usize> Write for PixelEncoder<W, C> {
             self.write_aligned(buf)?
         };
 
-        // println!(
-        //     "pixels_in: {}, pixels_count: {}",
-        //     self.pixels_in, self.pixels_count
-        // );
-
         if self.pixels_in == self.pixels_count {
-            // println!("writing end of image marker");
             self.finish()?;
         }
 

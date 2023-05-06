@@ -1,5 +1,4 @@
-use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::ops::{Deref, DerefMut};
+use crate::util::unlikely;
 
 // magic number to identify koi files
 pub const MAGIC: [u8; 8] = *b"KOI \xF0\x9F\x99\x82";
@@ -20,7 +19,7 @@ pub const OP_GRAY_ALPHA: u8 = 0xfd;
 pub const OP_RGB: u8 = 0xfe;
 pub const OP_RGBA: u8 = 0xff;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Op {
     Index = OP_INDEX,
@@ -32,28 +31,37 @@ pub enum Op {
     Rgb = OP_RGB,
     Rgba = OP_RGBA,
 }
+
+// impl Op => u8
+impl From<Op> for u8 {
+    fn from(op: Op) -> Self {
+        op as u8
+    }
+}
+
+impl From<u8> for Op {
+    fn from(op: u8) -> Self {
+        match op {
+            OP_INDEX..=OP_INDEX_END => Op::Index,
+            OP_DIFF..=OP_DIFF_END => Op::Diff,
+            OP_LUMA..=OP_LUMA_END => Op::Luma,
+            OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END => Op::DiffAlpha,
+            OP_GRAY => Op::Gray,
+            OP_GRAY_ALPHA => Op::GrayAlpha,
+            OP_RGB => Op::Rgb,
+            OP_RGBA => Op::Rgba,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Pixel<const C: usize> {
-    data: [u8; C],
+    pub data: [u8; C],
 }
 
 impl<const C: usize> PartialEq for Pixel<C> {
     fn eq(&self, other: &Self) -> bool {
         self.data[..] == other.data[..]
-    }
-}
-
-impl<const C: usize> Deref for Pixel<C> {
-    type Target = [u8; C];
-
-    fn deref(&self) -> &Self::Target {
-        &self.data
-    }
-}
-
-impl<const C: usize> DerefMut for Pixel<C> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.data
     }
 }
 
@@ -73,26 +81,16 @@ impl<const C: usize, const C2: usize> From<[u8; C2]> for Pixel<C> {
             _ => unreachable!(),
         };
 
-        match C {
-            1 => Pixel::from_channels([r]),
-            2 => Pixel::from_channels([r, a]),
-            3 => Pixel::from_channels([r, g, b]),
-            4 => Pixel::from_channels([r, g, b, a]),
-            _ => unreachable!(),
+        Pixel {
+            data: [r, g, b, a][..C].try_into().unwrap(),
         }
     }
 }
 
-impl<const C: usize> From<Pixel<C>> for [u8; C] {
-    fn from(px: Pixel<C>) -> Self {
-        px.data
-    }
-}
-
 impl<const C: usize> From<&[u8]> for Pixel<C> {
-    fn from(data: &[u8]) -> Self {
+    fn from(bytes: &[u8]) -> Self {
         let mut px = Pixel::default();
-        px.data[..data.len()].copy_from_slice(data);
+        px.data[..C].copy_from_slice(&bytes[..C]);
         px
     }
 }
@@ -102,32 +100,26 @@ impl<const C: usize> Pixel<C> {
         [self.r(), self.g(), self.b()]
     }
 
+    pub fn rgba(&self) -> [u8; 4] {
+        [self.r(), self.g(), self.b(), self.a()]
+    }
+
     pub fn r(&self) -> u8 {
-        match C {
-            3 => self.data[0],
-            4 => self.data[0],
-            2 => self.data[0],
-            1 => self.data[0],
-            _ => unreachable!(),
-        }
+        self.data[0]
     }
 
     pub fn g(&self) -> u8 {
         match C {
-            3 => self.data[0],
-            4 => self.data[1],
-            2 => self.data[0],
-            1 => self.data[0],
+            3 | 4 => self.data[1],
+            1 | 2 => self.data[0],
             _ => unreachable!(),
         }
     }
 
     pub fn b(&self) -> u8 {
         match C {
-            3 => self.data[2],
-            4 => self.data[2],
-            2 => self.data[0],
-            1 => self.data[0],
+            3 | 4 => self.data[2],
+            1 | 2 => self.data[0],
             _ => unreachable!(),
         }
     }
@@ -135,33 +127,10 @@ impl<const C: usize> Pixel<C> {
     pub fn a(&self) -> u8 {
         match C {
             4 => self.data[3],
-            3 => 0xff,
             2 => self.data[1],
-            1 => 0xff,
+            1 | 3 => 0xff,
             _ => unreachable!(),
         }
-    }
-
-    pub fn read(&mut self, bytes: &[u8]) {
-        self.data.copy_from_slice(&bytes);
-    }
-
-    pub fn get(&self) -> &[u8; C] {
-        &self.data
-    }
-
-    pub fn read_const(&mut self, bytes: [u8; C]) {
-        self.data.copy_from_slice(&bytes);
-    }
-
-    pub fn from_rgb([r, g, b]: [u8; 3]) -> Self {
-        [r, g, b, 0xff].into()
-    }
-
-    pub fn from_channels<const C2: usize>(channels: [u8; C2]) -> Self {
-        let mut px = Pixel::default();
-        px.data[..C2].copy_from_slice(&channels);
-        px
     }
 
     pub fn from_grayscale(gray: u8) -> Self {
@@ -176,18 +145,10 @@ impl<const C: usize> Pixel<C> {
 
     pub fn is_gray(&self) -> bool {
         match C {
-            4 | 3 => self.data[0] == self.data[1] && self.data[1] == self.data[2],
+            4 | 3 => unlikely(self.data[0] == self.data[1] && self.data[1] == self.data[2]),
             2 | 1 => true,
             _ => unreachable!(),
         }
-    }
-
-    pub fn to_u32(&self) -> u32 {
-        u32::from_be_bytes([self.data[0], self.data[1], self.data[2], self.data[3]])
-    }
-
-    pub fn from_u32(color: u32) -> Self {
-        color.to_be_bytes().into()
     }
 
     pub fn diff(&self, other: &Self) -> (u8, u8, u8) {
@@ -211,7 +172,6 @@ impl<const C: usize> Pixel<C> {
     pub fn apply_alpha_diff(&self, op: u8) -> Self {
         let diff = (op & !(Op::DiffAlpha as u8)).wrapping_sub(0x1e);
         let new_alpha = self.a().wrapping_add(diff);
-        // RgbaColor([self.data[0], self.data[1], self.data[2], new_alpha])
         [self.r(), self.g(), self.b(), new_alpha].into()
     }
 
@@ -245,9 +205,7 @@ impl<const C: usize> Pixel<C> {
             _ => unreachable!(),
         };
 
-        let x = ((r as u32 * 3 + g as u32 * 5 + b as u32 * 7 + a as u32 * 11) % CACHE_SIZE as u32)
-            as u8;
-        x
+        ((r as u32 * 3 + g as u32 * 5 + b as u32 * 7 + a as u32 * 11) % CACHE_SIZE as u32) as u8
     }
 }
 
@@ -272,7 +230,7 @@ pub fn luma_diff(diff: (u8, u8, u8)) -> Option<[u8; 2]> {
         _ => None,
     }
 }
-#[derive(IntoPrimitive, Copy, Clone, TryFromPrimitive, Debug)]
+#[derive(Copy, Clone, Debug)]
 #[repr(u32)]
 pub enum Compression {
     None = 0,
@@ -280,7 +238,20 @@ pub enum Compression {
     Lz4b = 2,
 }
 
-#[derive(IntoPrimitive, Copy, Clone, TryFromPrimitive, Debug)]
+impl TryFrom<u8> for Compression {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Compression::None),
+            1 => Ok(Compression::Lz4),
+            2 => Ok(Compression::Lz4b),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
 #[repr(u8)]
 pub enum Channels {
     Gray = 1,
@@ -289,7 +260,21 @@ pub enum Channels {
     Rgba = 4,
 }
 
-#[derive(IntoPrimitive, Copy, Clone, TryFromPrimitive, Debug)]
+impl TryFrom<u8> for Channels {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(Channels::Gray),
+            2 => Ok(Channels::GrayAlpha),
+            3 => Ok(Channels::Rgb),
+            4 => Ok(Channels::Rgba),
+            _ => Err(()),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
 #[repr(u8)]
 pub enum Colorspace {
     Srgb,
