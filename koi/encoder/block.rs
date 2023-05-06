@@ -1,6 +1,11 @@
+use core::slice;
+use std::io::Cursor;
+
+use bytes::{BufMut, BytesMut};
+
 use crate::{
-    types::{color_diff, luma_diff, Channels, Op, RgbaColor, CACHE_SIZE},
-    util::pixel_hash,
+    file::FileHeader,
+    types::{color_diff, luma_diff, Channels, Op, Pixel, CACHE_SIZE},
     QoirEncodeError,
 };
 
@@ -20,6 +25,50 @@ enum PixelEncoding {
 }
 
 impl PixelEncoding {
+    #[inline]
+    fn as_bytes(&self) -> &[u8] {
+        match self {
+            PixelEncoding::Index(data) => data,
+            PixelEncoding::Diff(data) => slice::from_ref(data),
+            PixelEncoding::AlphaDiff(data) => slice::from_ref(data),
+            PixelEncoding::LumaDiff(data) => data,
+            PixelEncoding::Gray(data) => data,
+            PixelEncoding::GrayAlpha(data) => data,
+            PixelEncoding::Rgba(data) => data,
+            PixelEncoding::Rgb(data) => data,
+        }
+    }
+
+    #[inline]
+    fn write_to_bytes(&self, bytes: &mut BytesMut) {
+        match self {
+            PixelEncoding::Index(data) => {
+                bytes.put(&data[..]);
+            }
+            PixelEncoding::Diff(data) => {
+                bytes.put_u8(*data);
+            }
+            PixelEncoding::AlphaDiff(data) => {
+                bytes.put_u8(*data);
+            }
+            PixelEncoding::LumaDiff(data) => {
+                bytes.put(&data[..]);
+            }
+            PixelEncoding::Gray(data) => {
+                bytes.put(&data[..]);
+            }
+            PixelEncoding::GrayAlpha(data) => {
+                bytes.put(&data[..]);
+            }
+            PixelEncoding::Rgba(data) => {
+                bytes.put(&data[..]);
+            }
+            PixelEncoding::Rgb(data) => {
+                bytes.put(&data[..]);
+            }
+        }
+    }
+
     #[inline]
     fn write_to_buf(&self, buf: &mut [u8]) -> usize {
         match self {
@@ -59,49 +108,45 @@ impl PixelEncoding {
     }
 }
 
-#[inline]
-fn encode_px<const CHANNELS: usize>(
-    curr_pixel: RgbaColor,
-    cache: &mut [RgbaColor; CACHE_SIZE],
-    prev_pixel: &mut RgbaColor,
+#[inline(always)]
+fn encode_px<const C: usize>(
+    curr_pixel: Pixel<C>,
+    cache: &mut [Pixel<C>; 256],
+    prev_pixel: &mut Pixel<C>,
 ) -> PixelEncoding {
     // index encoding
-    let hash = pixel_hash(curr_pixel);
-    if cache[hash as usize] == curr_pixel {
-        return PixelEncoding::Index([u8::from(Op::Index) | hash, 0]);
+    let hash_prev = prev_pixel.hash();
+    let index_px = cache[hash_prev as usize];
+    if index_px == curr_pixel {
+        return PixelEncoding::Index([u8::from(Op::Index) | hash_prev, 0]);
     }
-
-    cache[hash as usize] = curr_pixel;
+    cache[hash_prev as usize] = curr_pixel;
 
     // alpha diff encoding (whenever only alpha channel changes)
-    if curr_pixel.0[..3] == prev_pixel.0[..3] {
+    if C > 3 && curr_pixel.a() == prev_pixel.a() {
         if let Some(diff) = prev_pixel.alpha_diff(&curr_pixel) {
             return PixelEncoding::AlphaDiff(diff);
         }
     }
 
     let is_gray = curr_pixel.is_gray();
-    if curr_pixel.0[3] != prev_pixel.0[3] && curr_pixel.0[3] != 255 {
+    if C != 1 && curr_pixel.a() != prev_pixel.a() && curr_pixel.a() != 255 {
         // Gray Alpha encoding (whenever alpha channel changes and pixel is gray)
         if is_gray {
-            return PixelEncoding::GrayAlpha([
-                Op::GrayAlpha as u8,
-                curr_pixel.0[0],
-                curr_pixel.0[3],
-            ]);
+            return PixelEncoding::GrayAlpha([Op::GrayAlpha as u8, curr_pixel.r(), curr_pixel.a()]);
         }
 
-        if CHANNELS != Channels::Rgba as u8 as usize {
+        if C != Channels::Rgba as u8 as usize {
             panic!("RGBA encoding is only supported for RGBA images");
         }
 
         // RGBA encoding (whenever alpha channel changes)
         return PixelEncoding::Rgba([
             Op::Rgba as u8,
-            curr_pixel.0[0],
-            curr_pixel.0[1],
-            curr_pixel.0[2],
-            curr_pixel.0[3],
+            curr_pixel.r(),
+            curr_pixel.g(),
+            curr_pixel.b(),
+            curr_pixel.a(),
         ]);
     }
 
@@ -120,40 +165,60 @@ fn encode_px<const CHANNELS: usize>(
 
     if is_gray {
         // Gray encoding
-        let RgbaColor([r, g, b, _]) = curr_pixel;
-        if r == g && g == b {
-            return PixelEncoding::Gray([Op::Gray as u8, curr_pixel.0[0]]);
-        }
+        return PixelEncoding::Gray([Op::Gray as u8, curr_pixel.r()]);
     }
 
     // RGB encoding
     PixelEncoding::Rgb([
         Op::Rgb as u8,
-        curr_pixel.0[0],
-        curr_pixel.0[1],
-        curr_pixel.0[2],
+        curr_pixel.r(),
+        curr_pixel.g(),
+        curr_pixel.b(),
     ])
 }
 
-pub fn encode<const CHANNELS: usize>(
+pub fn encode_to_vec<const CHANNELS: usize>(
+    data: &[u8],
+    header: FileHeader,
+) -> Result<Vec<u8>, QoirEncodeError> {
+    let mut out = vec![0; header.width as usize * header.height as usize * CHANNELS];
+    let bytes_written = encode::<CHANNELS>(data, &mut out, header)?;
+    out.truncate(bytes_written);
+    Ok(out)
+}
+
+pub fn encode<const C: usize>(
     data: &[u8],
     out: &mut [u8],
+    header: FileHeader,
 ) -> Result<usize, QoirEncodeError> {
-    let mut cache = [RgbaColor([0, 0, 0, 0]); CACHE_SIZE];
-    let mut bytes_written = 0;
+    let mut cache = [Pixel::default(); 256];
+    let mut bytes_written = header.write_to_buf(out)?;
+    let mut prev_pixel = Pixel::default();
 
+    let mut out_chunk = [0; CHUNK_SIZE];
     for chunk in data.chunks(CHUNK_SIZE) {
-        let mut out_chunk = [0; CHUNK_SIZE];
         let mut chunk_bytes_written = 0;
-        let mut prev_pixel = RgbaColor([0, 0, 0, 0]);
-        for px in chunk.chunks_exact(CHANNELS) {
-            let curr_pixel = RgbaColor::from_channels::<CHANNELS>(px);
-            let encoded_px = encode_px::<CHANNELS>(curr_pixel, &mut cache, &mut prev_pixel);
+
+        for px in chunk.chunks_exact(C) {
+            let px = unsafe { px.try_into().unwrap_unchecked() };
+            let curr_pixel = Pixel::from_channels::<C>(px);
+            let encoded_px = encode_px::<C>(curr_pixel, &mut cache, &mut prev_pixel);
+
             prev_pixel = curr_pixel;
             chunk_bytes_written += encoded_px.write_to_buf(&mut out_chunk[chunk_bytes_written..]);
         }
 
-        bytes_written = lz4_flex::block::compress_into(
+        // for px in  {
+        //     let curr_pixel = RgbaColor::from_channels::<CHANNELS>(px);
+        //     let encoded_px = encode_px::<CHANNELS>(curr_pixel, &mut cache, &mut prev_pixel);
+        //     prev_pixel = curr_pixel;
+        //     // chunk_bytes_written += encoded_px.write_to_buf(&mut out_chunk[chunk_bytes_written..]);
+        //     out_chunk
+        //         .extend_from_slice(encoded_px.write_to_buf(&mut out_chunk[chunk_bytes_written..]));
+        // }
+
+        bytes_written += lz4_flex::block::compress_into(
             out_chunk[..chunk_bytes_written].as_ref(),
             &mut out[bytes_written..],
         )?;

@@ -11,7 +11,7 @@ pub enum ImageFormatType {
     // PngFast,
     // Koi,
     KoiLz4,
-    // Koi2,
+    Koi2,
     Qoi,
 }
 
@@ -22,7 +22,7 @@ impl ImageFormatType {
             // ImageFormatType::PngFast => Box::new(png::PngFast::<C>::new()),
             // ImageFormatType::Koi => Box::new(koi::Koi::<C>::new()),
             ImageFormatType::KoiLz4 => Box::new(koi::KoiLz4::<C> {}),
-            // ImageFormatType::Koi2 => Box::new(koi::Koi2::<C> {}),
+            ImageFormatType::Koi2 => Box::new(koi::Koi2::<C> {}),
             ImageFormatType::Qoi => Box::new(qoi::Qoi::<C>::new()),
         }
     }

@@ -1,9 +1,5 @@
+use koi::{file::FileHeader, types::Compression};
 use std::io::Result;
-
-use koi::{
-    file::FileHeader,
-    types::{Compression, MAGIC},
-};
 
 use super::ImageFormat;
 
@@ -12,9 +8,9 @@ pub struct Koi<const C: usize> {}
 
 impl<const C: usize> ImageFormat for Koi<C> {
     fn encode(&mut self, data: &[u8], dimensions: (u32, u32)) -> Result<Vec<u8>> {
-        let mut out = vec![0; (data.len() * 3) / 2];
+        let mut out = Vec::with_capacity(data.len() * 2);
 
-        koi::encode::<_, _, C, 0>(
+        koi::encode::<_, _, C>(
             FileHeader::new(
                 None,
                 dimensions.0,
@@ -30,7 +26,7 @@ impl<const C: usize> ImageFormat for Koi<C> {
     }
 
     fn decode(&mut self, data: &[u8], _dimensions: (u32, u32)) -> Result<Vec<u8>> {
-        let mut out = vec![0; (data.len() * 3) / 2];
+        let mut out = Vec::with_capacity(data.len() * 2);
         koi::decode::<_, _, C>(data, &mut out).map(|_| ())?;
         Ok(out)
     }
@@ -41,9 +37,9 @@ pub struct KoiLz4<const C: usize> {}
 
 impl<const C: usize> ImageFormat for KoiLz4<C> {
     fn encode(&mut self, data: &[u8], dimensions: (u32, u32)) -> Result<Vec<u8>> {
-        let mut out = vec![0; (data.len() * 3) / 2];
+        let mut out = Vec::with_capacity(data.len() * 2);
 
-        koi::encode::<_, _, C, 1>(
+        koi::encode::<_, _, C>(
             FileHeader::new(
                 None,
                 dimensions.0,
@@ -54,8 +50,6 @@ impl<const C: usize> ImageFormat for KoiLz4<C> {
             data,
             &mut out,
         )?;
-
-        println!("magic: {:?}", &out[..8]);
 
         Ok(out)
     }
@@ -72,8 +66,6 @@ pub struct Koi2<const C: usize> {}
 
 impl<const C: usize> ImageFormat for Koi2<C> {
     fn encode(&mut self, data: &[u8], dimensions: (u32, u32)) -> Result<Vec<u8>> {
-        let mut out = vec![0; (data.len() * 3) / 2];
-
         let header = FileHeader::new(
             None,
             dimensions.0,
@@ -82,14 +74,12 @@ impl<const C: usize> ImageFormat for Koi2<C> {
             Compression::Lz4b,
         );
 
-        let header_size = header.write_to_buf(&mut out)?;
-        koi::encoder::block::encode::<C>(data, &mut out[header_size..])?;
-
-        Ok(out)
+        let data = koi::encoder::block::encode_to_vec::<C>(data, header)?;
+        Ok(data)
     }
 
     fn decode(&mut self, data: &[u8], _dimensions: (u32, u32)) -> Result<Vec<u8>> {
-        let mut out = vec![0; (data.len() * 3) / 2];
+        let mut out = vec![0; data.len() * 2];
         koi::decode::<_, _, C>(data, &mut out).map(|_| ())?;
         Ok(out)
     }

@@ -5,6 +5,7 @@ use crate::{
     QoirDecodeError, QoirEncodeError,
 };
 use bson::{Binary, Document};
+use bytes::{BufMut, BytesMut};
 
 #[derive(Debug, Clone)]
 pub struct FileHeader {
@@ -69,6 +70,18 @@ impl FileHeader {
         self.doc().to_writer(&mut header)?;
         buf[MAGIC.len()..MAGIC.len() + header.len()].copy_from_slice(&header);
         Ok(header.len() + MAGIC.len())
+    }
+
+    pub fn write_to_vec(&self) -> Result<Vec<u8>, QoirEncodeError> {
+        let mut bytes = vec![];
+        self.write(&mut bytes)?;
+        Ok(bytes)
+    }
+
+    pub fn write_to_bytes(&self, mut bytes: &mut BytesMut) -> Result<(), QoirEncodeError> {
+        bytes.put(&MAGIC[..]);
+        bytes.put(&self.write_to_vec()?[..]);
+        Ok(())
     }
 
     pub fn check_magic(reader: &mut dyn Read) -> Result<(), QoirDecodeError> {
