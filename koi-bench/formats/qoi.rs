@@ -11,17 +11,23 @@ impl<const C: usize> Qoi<C> {
 }
 
 impl<const C: usize> ImageFormat for Qoi<C> {
-    fn encode(&mut self, data: &[u8], out: &mut Vec<u8>, dimensions: (u32, u32)) -> Result<()> {
-        *out = qoi::encode_to_vec(data, dimensions.0, dimensions.1)
+    fn encode(&mut self, data: &[u8], dimensions: (u32, u32)) -> Result<Vec<u8>> {
+        let res = qoi::encode_to_vec(data, dimensions.0, dimensions.1)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-
-        Ok(())
+        Ok(res)
     }
 
-    fn decode(&mut self, data: &[u8], out: &mut Vec<u8>, _dimensions: (u32, u32)) -> Result<()> {
-        (_, *out) = qoi::decode_to_vec(data)
+    fn decode(&mut self, data: &[u8], dimensions: (u32, u32)) -> Result<Vec<u8>> {
+        let (header, vec) = qoi::decode_to_vec(data)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
-        Ok(())
+        if header.width != dimensions.0 || header.height != dimensions.1 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Qoi: Invalid dimensions",
+            ));
+        }
+
+        Ok(vec)
     }
 }

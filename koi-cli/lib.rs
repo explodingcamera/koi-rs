@@ -15,8 +15,8 @@ fn read_png(path: &str) -> (Vec<u8>, (u32, u32)) {
     (buf, (info.width, info.height))
 }
 
-const CHANNELS: usize = 3;
-const FILE: &str = "koi-cli/tests/x_big.png";
+const CHANNELS: usize = 4;
+const FILE: &str = "koi-cli/tests/x.png";
 
 pub fn run() {
     let (test_image, (width, height)) = read_png(FILE);
@@ -30,7 +30,7 @@ pub fn run() {
         Compression::None,
     );
 
-    encode::<_, _, CHANNELS, 1>(header, &test_image[..], &mut out).expect("Failed to encode");
+    encode::<_, _, CHANNELS>(header, &test_image[..], &mut out).expect("Failed to encode");
 
     let encoded_file = BufReader::new(File::open("test.koi").expect("Failed to open file"));
     let mut decoded_file = Vec::with_capacity((width * height * (CHANNELS as u32)) as usize);

@@ -7,8 +7,10 @@ version = "0.1.0"
 path = "lib.rs"
 
 [dependencies]
+arrayvec = "0.7"
 bson = "2.5"
-lz4_flex = {version = "0.10", default-features = false, features = ["frame"]}
+bytes = "1.0"
+lz4_flex = {version = "0.10"}
 num_enum = "0.6"
 smallvec = "1.10"
 thiserror = "1.0"

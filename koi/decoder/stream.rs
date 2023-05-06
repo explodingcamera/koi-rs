@@ -4,13 +4,13 @@ use std::io::{self, BufReader, Read, Write};
 use super::reader::Reader;
 use crate::{
     types::*,
-    util::{likely, pixel_hash, unlikely},
+    util::{likely, unlikely},
 };
 
 pub struct PixelDecoder<R: Read, const C: usize> {
     read_decoder: Reader<R>,
-    cache: [RgbaColor; CACHE_SIZE],
-    last_px: RgbaColor,
+    cache: [Pixel<C>; CACHE_SIZE],
+    last_px: Pixel<C>,
     pixels_in: usize,    // pixels decoded so far
     pixels_count: usize, // total number of pixels in the image
 }
@@ -19,8 +19,8 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
     pub fn new(data: Reader<R>, pixels_count: usize) -> Self {
         Self {
             read_decoder: data,
-            cache: [RgbaColor([0, 0, 0, 0]); CACHE_SIZE],
-            last_px: RgbaColor([0, 0, 0, 255]),
+            cache: [Pixel::default(); CACHE_SIZE],
+            last_px: Pixel::default(),
             pixels_in: 0,
             pixels_count,
         }
@@ -77,25 +77,32 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
             let [b1] = self.read_decoder.read_bytes::<1>()?;
             let buffer_offset = i * C;
 
-            let pixel = match b1 {
+            let mut pixel: Pixel<C> = match b1 {
                 OP_INDEX..=OP_INDEX_END => {
                     self.last_px = self.cache[b1 as usize];
-                    buf[buffer_offset..buffer_offset + C].copy_from_slice(&self.last_px.0[..C]);
+                    buf[buffer_offset..buffer_offset + C].copy_from_slice(self.last_px.get());
                     self.pixels_in += 1;
                     pixels_read += 1;
                     continue;
                 }
                 OP_GRAY => {
                     let [b2] = self.read_decoder.read_bytes::<1>()?;
-                    RgbaColor::from_grayscale(b2)
+                    Pixel::from_grayscale(b2)
                 }
                 OP_GRAY_ALPHA => {
+                    if unlikely(C < Channels::GrayAlpha as u8 as usize) {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("Invalid opcode GRAY_ALPHA for {} channels", C),
+                        ));
+                    }
+
                     let [b2, b3] = self.read_decoder.read_bytes::<2>()?;
-                    RgbaColor([b2, b2, b2, b3])
+                    Pixel::from_channels([b2, b2, b2, b3])
                 }
                 OP_RGB => {
                     let [b2, b3, b4] = self.read_decoder.read_bytes::<3>()?;
-                    RgbaColor::from_rgb([b2, b3, b4])
+                    Pixel::from_rgb([b2, b3, b4])
                 }
                 OP_RGBA => {
                     if unlikely(C < Channels::Rgba as u8 as usize) {
@@ -104,7 +111,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
                             format!("Invalid opcode RGBA for {} channels", C),
                         ));
                     }
-                    RgbaColor(self.read_decoder.read_bytes::<4>()?)
+                    Pixel::from_channels(self.read_decoder.read_bytes::<4>()?)
                 }
                 OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END => self.last_px.apply_alpha_diff(b1),
                 OP_DIFF..=OP_DIFF_END => self.last_px.apply_diff(b1),
@@ -114,10 +121,10 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
                 }
             };
 
-            buf[buffer_offset..buffer_offset + C].copy_from_slice(&pixel.0[..C]);
+            buf[buffer_offset..buffer_offset + C].copy_from_slice(pixel.get());
             self.pixels_in += 1;
             self.last_px = pixel;
-            self.cache[pixel_hash(pixel) as usize] = pixel;
+            self.cache[pixel.hash() as usize] = pixel;
             pixels_read += 1;
         }
 
@@ -217,27 +224,29 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
     ) -> io::Result<usize> {
         let b1 = buf_in[buffer_in_pos];
 
-        let pixel = match b1 {
+        let mut pixel: Pixel<C> = match b1 {
             OP_INDEX..=OP_INDEX_END => {
+                // println!("OP_INDEX");
                 self.last_px = self.cache[b1 as usize];
-                buf_out[buffer_offset..buffer_offset + C].copy_from_slice(&self.last_px.0[..C]);
+                buf_out[buffer_offset..buffer_offset + C].copy_from_slice(self.last_px.get());
                 self.pixels_in += 1;
                 return Ok(buffer_in_pos + 1);
             }
             OP_GRAY => {
+                // println!("OP_GRAY");
                 let b2 = buf_in[buffer_in_pos + 1];
-                RgbaColor::from_grayscale(b2)
+                Pixel::from_grayscale(b2)
             }
             OP_GRAY_ALPHA => {
                 let b2 = buf_in[buffer_in_pos + 1];
                 let b3 = buf_in[buffer_in_pos + 2];
-                RgbaColor([b2, b2, b2, b3])
+                Pixel::from_channels([b2, b2, b2, b3])
             }
             OP_RGB => {
                 let r = buf_in[buffer_in_pos + 1];
                 let g = buf_in[buffer_in_pos + 2];
                 let b = buf_in[buffer_in_pos + 3];
-                RgbaColor([r, g, b, 255])
+                Pixel::from_rgb([r, g, b])
             }
             OP_RGBA => {
                 if unlikely(C < Channels::Rgba as u8 as usize) {
@@ -246,11 +255,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
                         format!("Invalid opcode RGBA for {} channels", C),
                     ));
                 }
-                RgbaColor(
-                    buf_in[buffer_in_pos + 1..buffer_in_pos + 5]
-                        .try_into()
-                        .unwrap(),
-                )
+                buf_in[buffer_in_pos + 1..buffer_in_pos + 5].into()
             }
             OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END => self.last_px.apply_alpha_diff(b1),
             OP_DIFF..=OP_DIFF_END => self.last_px.apply_diff(b1),
@@ -260,10 +265,10 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
             }
         };
 
-        buf_out[buffer_offset..buffer_offset + C].copy_from_slice(&pixel.0[..C]);
+        buf_out[buffer_offset..buffer_offset + C].copy_from_slice(pixel.get());
         self.pixels_in += 1;
         self.last_px = pixel;
-        self.cache[pixel_hash(pixel) as usize] = pixel;
+        self.cache[pixel.hash() as usize] = pixel;
 
         Ok(buffer_in_pos + required_bytes + 1)
     }
