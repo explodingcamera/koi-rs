@@ -14,6 +14,9 @@ pub struct FileHeader {
     pub height: u32,              // h
     pub channels: Channels,       // c
     pub compression: Compression, // x
+
+    // defaults to a dynamic value based on the image size if not specified (version >= 1)
+    pub block_size: Option<u32>, // b
 }
 
 #[inline]
@@ -26,19 +29,22 @@ fn to_binary(bytes: Vec<u8>) -> Binary {
 
 impl FileHeader {
     pub fn new(
+        version: u32,
         exif: Option<Vec<u8>>,
         width: u32,
         height: u32,
         channels: Channels,
         compression: Compression,
+        block_size: Option<u32>,
     ) -> FileHeader {
         FileHeader {
-            version: 0,
+            version,
             exif,
             width,
             height,
             channels,
             compression,
+            block_size,
         }
     }
 
@@ -97,7 +103,7 @@ impl FileHeader {
 
         let doc = Document::from_reader(reader).map_err(err("Failed to read file header"))?;
 
-        let (version, exif, width, height, channels, compression) = (
+        let (version, exif, width, height, channels, compression, block_size) = (
             doc.get_i32("v")
                 .map_err(err("Failed to read file version"))? as u32,
             doc.get_binary_generic("e").ok().map(|b| b.to_vec()),
@@ -106,6 +112,7 @@ impl FileHeader {
             doc.get_i32("c").map_err(err("Failed to read channels"))? as u32,
             doc.get_i32("x")
                 .map_err(err("Failed to read compression"))? as u32,
+            doc.get_i32("b").ok().map(|b| b as u32),
         );
 
         Ok(Self {
@@ -121,6 +128,7 @@ impl FileHeader {
                 .map_err(err("Invalid compression"))?
                 .try_into()
                 .map_err(err("Invalid compression"))?,
+            block_size,
         })
     }
 }

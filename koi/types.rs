@@ -235,7 +235,6 @@ pub fn luma_diff(diff: (u8, u8, u8)) -> Option<[u8; 2]> {
 pub enum Compression {
     None = 0,
     Lz4 = 1,
-    Lz4b = 2,
 }
 
 impl TryFrom<u8> for Compression {
@@ -245,7 +244,6 @@ impl TryFrom<u8> for Compression {
         match value {
             0 => Ok(Compression::None),
             1 => Ok(Compression::Lz4),
-            2 => Ok(Compression::Lz4b),
             _ => Err(()),
         }
     }

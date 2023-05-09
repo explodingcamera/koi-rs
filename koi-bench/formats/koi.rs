@@ -12,11 +12,13 @@ impl<const C: usize> ImageFormat for Koi<C> {
 
         koi::encode::<_, _, C>(
             FileHeader::new(
+                0,
                 None,
                 dimensions.0,
                 dimensions.1,
                 (C as u8).try_into().expect("Koi: Invalid channel count"),
                 Compression::None,
+                None,
             ),
             data,
             &mut out,
@@ -41,11 +43,13 @@ impl<const C: usize> ImageFormat for KoiLz4<C> {
 
         koi::encode::<_, _, C>(
             FileHeader::new(
+                0,
                 None,
                 dimensions.0,
                 dimensions.1,
                 (C as u8).try_into().expect("Koi: Invalid channel count"),
                 Compression::Lz4,
+                None,
             ),
             data,
             &mut out,
@@ -67,11 +71,13 @@ pub struct Koi2<const C: usize> {}
 impl<const C: usize> ImageFormat for Koi2<C> {
     fn encode(&mut self, data: &[u8], dimensions: (u32, u32)) -> Result<Vec<u8>> {
         let header = FileHeader::new(
+            1,
             None,
             dimensions.0,
             dimensions.1,
             (C as u8).try_into().expect("Koi: Invalid channel count"),
-            Compression::Lz4b,
+            Compression::Lz4,
+            None,
         );
 
         let data = koi::encoder::block::encode_to_vec::<C>(data, header)?;

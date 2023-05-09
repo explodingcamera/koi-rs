@@ -24,9 +24,6 @@ pub fn encode<WRITER: std::io::Write, READER: std::io::Read, const CHANNELS: usi
     let mut encoder = match header.compression {
         types::Compression::None => encoder::PixelEncoder::<WRITER, CHANNELS>::new_uncompressed,
         types::Compression::Lz4 => encoder::PixelEncoder::<WRITER, CHANNELS>::new_lz4,
-        types::Compression::Lz4b => {
-            panic!("Invalid compression type. Valid values are 0 (uncompressed) and 1 (lz4)")
-        }
     }(writer, (header.width * header.height) as usize);
 
     encoder.encode(reader)?;
@@ -44,7 +41,6 @@ pub fn decode<WRITER: std::io::Write, READER: std::io::Read, const CHANNELS: usi
     let mut decoder = match header.compression {
         types::Compression::None => decoder::PixelDecoder::<READER, CHANNELS>::new_uncompressed,
         types::Compression::Lz4 => decoder::PixelDecoder::<READER, CHANNELS>::new_lz4,
-        types::Compression::Lz4b => panic!("Lz4b is not supported yet"),
     }(reader, (header.width * header.height) as usize);
 
     decoder.decode(&mut writer)?;
@@ -90,6 +86,12 @@ pub enum QoirEncodeError {
 
     #[error(transparent)]
     Lz4Compress(#[from] Lz4CompressError),
+
+    #[error("Invalid length")]
+    InvalidLength,
+
+    #[error("Unsupported version: {0}")]
+    UnsupportedVersion(u8),
 }
 
 impl From<QoirEncodeError> for std::io::Error {

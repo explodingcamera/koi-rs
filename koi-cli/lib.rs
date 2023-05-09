@@ -23,11 +23,13 @@ pub fn run() {
     let mut out = File::create("test.koi").expect("Failed to create file");
 
     let header = FileHeader::new(
+        0,
         None,
         width,
         height,
         (CHANNELS as u8).try_into().unwrap(),
         Compression::None,
+        None,
     );
 
     encode::<_, _, CHANNELS>(header, &test_image[..], &mut out).expect("Failed to encode");

@@ -142,6 +142,10 @@ pub fn encode<const C: usize>(
     out: &mut [u8],
     header: FileHeader,
 ) -> Result<usize, QoirEncodeError> {
+    if header.version != 1 {
+        return Err(QoirEncodeError::UnsupportedVersion(header.version as u8));
+    }
+
     let mut cache = [Pixel::default(); 256];
     let mut bytes_written = header.write_to_buf(out)?;
     let mut prev_pixel = Pixel::default();
@@ -159,10 +163,17 @@ pub fn encode<const C: usize>(
             chunk_bytes_written += encoded_px.write_to_buf(&mut out_chunk[chunk_bytes_written..]);
         }
 
-        bytes_written += lz4_flex::block::compress_into(
+        let compress_size = lz4_flex::block::compress_into(
             out_chunk[..chunk_bytes_written].as_ref(),
-            &mut out[bytes_written..],
+            &mut out[bytes_written + 2..],
         )?;
+
+        let prefix: [u8; 2] = (compress_size as u32).to_be_bytes()[..]
+            .try_into()
+            .map_err(|_| QoirEncodeError::InvalidLength)?;
+
+        out[bytes_written..bytes_written + 2].copy_from_slice(&prefix);
+        bytes_written += compress_size + 2;
     }
 
     Ok(bytes_written)
