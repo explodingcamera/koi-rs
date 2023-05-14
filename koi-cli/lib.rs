@@ -28,7 +28,7 @@ pub fn run() {
         width,
         height,
         (CHANNELS as u8).try_into().unwrap(),
-        Compression::None,
+        Compression::Lz4,
         None,
     );
 

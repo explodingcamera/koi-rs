@@ -132,13 +132,11 @@ fn run_test(
     let mut errored = false;
 
     if channels != 3 && channels != 4 {
-        // println!("Unsupported number of channels");
         return (results, true);
     }
 
     'outer: for format in ImageFormatType::iter() {
         // ENCODE
-        // println!("encoding {format}...");
         let mut shortest_encode: u128 = u128::MAX;
         let mut output = Vec::new();
 
@@ -146,7 +144,7 @@ fn run_test(
             let mut encoder = format.get_impl_dyn(channels);
             let start = Instant::now();
 
-            let out = match encoder.encode(black_box(input), (width, height)) {
+            let out = match black_box(encoder.encode(black_box(input), (width, height))) {
                 Err(e) => {
                     println!("Error encoding {format}, skipping: {e}");
                     errored = true;
@@ -163,7 +161,6 @@ fn run_test(
         let encode_size = output.len();
 
         // DECODE
-        // println!("decoding {format}...");
         let shortest_decode: u128 = u128::MAX;
         // for _ in 0..RUNS {
         //     let mut decoder = format.get_impl_dyn(channels);

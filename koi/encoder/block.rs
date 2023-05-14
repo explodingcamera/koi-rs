@@ -1,6 +1,7 @@
 use crate::{
     file::FileHeader,
-    types::{color_diff, luma_diff, Channels, Op, Pixel},
+    types::{Channels, Op, Pixel},
+    util::unlikely,
     QoirEncodeError,
 };
 
@@ -8,7 +9,6 @@ use crate::{
 const CHUNK_SIZE: usize = 199992; // about 200kb
 
 enum PixelEncoding {
-    Index(u8),
     Diff(u8),
     AlphaDiff(u8),
     LumaDiff([u8; 2]),
@@ -22,10 +22,6 @@ impl PixelEncoding {
     #[inline]
     fn write_to_buf(&self, buf: &mut [u8]) -> usize {
         match self {
-            PixelEncoding::Index(data) => {
-                buf[0] = *data;
-                1
-            }
             PixelEncoding::Diff(data) => {
                 buf[0] = *data;
                 1
@@ -58,22 +54,9 @@ impl PixelEncoding {
     }
 }
 
-#[inline(always)]
-fn encode_px<const C: usize>(
-    curr_pixel: Pixel<C>,
-    cache: &mut [Pixel<C>; 256],
-    prev_pixel: Pixel<C>,
-) -> PixelEncoding {
-    // index encoding
-    let hash = curr_pixel.hash();
-    let index_px = cache[hash as usize];
-    if index_px == prev_pixel {
-        return PixelEncoding::Index(u8::from(Op::Index) | hash);
-    }
-    cache[hash as usize] = curr_pixel;
-
-    // alpha diff encoding (whenever only alpha channel changes)
-    if C > 3 && curr_pixel.a() == prev_pixel.a() {
+#[inline]
+fn encode_px<const C: usize>(curr_pixel: Pixel<C>, prev_pixel: Pixel<C>) -> PixelEncoding {
+    if (C == 2 || C == 4) && curr_pixel.rgb() == prev_pixel.rgb() {
         if let Some(diff) = prev_pixel.alpha_diff(&curr_pixel) {
             return PixelEncoding::AlphaDiff(diff);
         }
@@ -81,13 +64,12 @@ fn encode_px<const C: usize>(
 
     let is_gray = curr_pixel.is_gray();
     if C != 1 && curr_pixel.a() != prev_pixel.a() && curr_pixel.a() != 255 {
-        // Gray Alpha encoding (whenever alpha channel changes and pixel is gray)
         if is_gray {
             return PixelEncoding::GrayAlpha([Op::GrayAlpha as u8, curr_pixel.r(), curr_pixel.a()]);
         }
 
-        if C != Channels::Rgba as u8 as usize {
-            panic!("RGBA encoding is only supported for RGBA images");
+        if unlikely(C != Channels::Rgba as u8 as usize) {
+            panic!("RGBA encoding is currently only supported for RGBA images");
         }
 
         // RGBA encoding (whenever alpha channel changes)
@@ -102,14 +84,15 @@ fn encode_px<const C: usize>(
 
     // Difference between current and previous pixel
     let diff = curr_pixel.diff(&prev_pixel);
+    let color_diff = diff.color();
 
     // Diff encoding
-    if let Some(diff) = color_diff(diff) {
+    if let Some(diff) = color_diff {
         return PixelEncoding::Diff(diff);
     }
 
-    // Luma encoding (a little bit broken on fast_decode) TODO: fix
-    if let Some(luma) = luma_diff(diff) {
+    // Luma encoding
+    if let Some(luma) = diff.luma() {
         return PixelEncoding::LumaDiff(luma);
     }
 
@@ -146,7 +129,6 @@ pub fn encode<const C: usize>(
         return Err(QoirEncodeError::UnsupportedVersion(header.version as u8));
     }
 
-    let mut cache = [Pixel::default(); 256];
     let mut bytes_written = header.write_to_buf(out)?;
     let mut prev_pixel = Pixel::default();
 
@@ -155,9 +137,9 @@ pub fn encode<const C: usize>(
         let mut chunk_bytes_written = 0;
 
         for px in chunk.chunks_exact(C) {
-            // Safety: we know that px.len() == C, can be removed when array_exact is stable
+            let px: [u8; C] = unsafe { px.try_into().unwrap_unchecked() };
             let curr_pixel = px.into();
-            let encoded_px = encode_px::<C>(curr_pixel, &mut cache, prev_pixel);
+            let encoded_px = encode_px::<C>(curr_pixel, prev_pixel);
 
             prev_pixel = curr_pixel;
             chunk_bytes_written += encoded_px.write_to_buf(&mut out_chunk[chunk_bytes_written..]);
@@ -168,7 +150,7 @@ pub fn encode<const C: usize>(
             &mut out[bytes_written + 2..],
         )?;
 
-        let prefix: [u8; 2] = (compress_size as u32).to_be_bytes()[..]
+        let prefix: [u8; 2] = (compress_size as u16).to_be_bytes()[..]
             .try_into()
             .map_err(|_| QoirEncodeError::InvalidLength)?;
 

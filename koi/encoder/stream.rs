@@ -1,5 +1,5 @@
 use super::writer::Writer;
-use crate::types::{color_diff, luma_diff, Channels, Op, Pixel, CACHE_SIZE, END_OF_IMAGE};
+use crate::types::{Channels, Op, Pixel, END_OF_IMAGE};
 use lz4_flex::frame::FrameEncoder;
 use std::io::{self, Read, Write};
 
@@ -8,11 +8,8 @@ use std::io::{self, Read, Write};
 // - C is the number of channels in the image
 pub struct PixelEncoder<W: Write, const C: usize> {
     writer: Writer<W>,
-    // runlength: u8,    // if runlength > 0 then we are in runlength encoding mode
     pixels_in: usize, // pixels encoded so far
     pixels_count: usize,
-
-    cache: [Pixel<C>; CACHE_SIZE],
     prev_pixel: Pixel<C>,
 
     remainder: smallvec::SmallVec<[u8; 3]>,
@@ -22,7 +19,6 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
     pub fn new(writer: Writer<W>, pixels_count: usize) -> Self {
         Self {
             writer,
-            cache: [Pixel::default(); CACHE_SIZE],
             // runlength: 0,
             pixels_in: 0,
             pixels_count,
@@ -53,20 +49,9 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
     #[inline]
     fn encode_pixel(&mut self, curr_pixel: Pixel<C>, prev_pixel: Pixel<C>) -> std::io::Result<()> {
         self.pixels_in += 1;
-        let mut curr_pixel = curr_pixel;
-
-        // index encoding
-        let hash = curr_pixel.hash();
-        let index_px = self.cache[hash as usize];
-        if prev_pixel == index_px {
-            self.writer.write_one(u8::from(Op::Index) | hash)?;
-            return Ok(());
-        }
-
         // alpha diff encoding (whenever only alpha channel changes)
         if (C == 2 || C == 4) && curr_pixel.rgb() == prev_pixel.rgb() {
             if let Some(diff) = prev_pixel.alpha_diff(&curr_pixel) {
-                self.cache_pixel(&mut curr_pixel, hash);
                 self.writer.write_one(diff)?;
                 return Ok(());
             }
@@ -93,7 +78,6 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
                 ])?;
             }
 
-            self.cache_pixel(&mut curr_pixel, hash);
             return Ok(());
         }
 
@@ -101,29 +85,25 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         let diff = curr_pixel.diff(&prev_pixel);
 
         // Diff encoding
-        if let Some(diff) = color_diff(diff) {
-            self.cache_pixel(&mut curr_pixel, hash);
+        if let Some(diff) = diff.color() {
             self.writer.write_one(diff)?;
             return Ok(());
         }
 
-        // Luma encoding (a little bit broken on fast_decode) TODO: fix
-        // if let Some(luma) = luma_diff(diff) {
-        //     self.cache_pixel(&mut curr_pixel, hash);
-        //     self.writer.write_all(&luma)?;
-        //     return Ok(());
-        // }
-
         if is_gray {
             // Gray encoding
-            self.cache_pixel(&mut curr_pixel, hash);
             self.writer.write_one(Op::Gray as u8)?;
             self.writer.write_one(curr_pixel.r())?;
             return Ok(());
         }
 
+        // Luma encoding (a little bit broken on fast_decode) TODO: fix
+        if let Some(luma) = diff.luma() {
+            self.writer.write_all(&luma)?;
+            return Ok(());
+        }
+
         // RGB encoding
-        self.cache_pixel(&mut curr_pixel, hash);
         self.writer.write_all(&[
             Op::Rgb as u8,
             curr_pixel.r(),
@@ -133,12 +113,7 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
         Ok(())
     }
 
-    #[inline]
-    fn cache_pixel(&mut self, curr_pixel: &mut Pixel<C>, hash: u8) {
-        self.cache[hash as usize] = *curr_pixel;
-    }
-
-    // flushes the remaining pixels in the cache and writes the end of image marker, automatically called after N pixels are encoded
+    // flushes the remaining pixels and writes the end of image marker, automatically called after N pixels are encoded
     pub fn finish(&mut self) -> std::io::Result<()> {
         self.writer.write_all(&END_OF_IMAGE)
     }
