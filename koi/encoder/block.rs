@@ -8,7 +8,7 @@ use crate::{
 const CHUNK_SIZE: usize = 199992; // about 200kb
 
 enum PixelEncoding {
-    Index([u8; 2]),
+    Index(u8),
     Diff(u8),
     AlphaDiff(u8),
     LumaDiff([u8; 2]),
@@ -23,8 +23,8 @@ impl PixelEncoding {
     fn write_to_buf(&self, buf: &mut [u8]) -> usize {
         match self {
             PixelEncoding::Index(data) => {
-                buf[..2].copy_from_slice(data);
-                2
+                buf[0] = *data;
+                1
             }
             PixelEncoding::Diff(data) => {
                 buf[0] = *data;
@@ -68,7 +68,7 @@ fn encode_px<const C: usize>(
     let hash = curr_pixel.hash();
     let index_px = cache[hash as usize];
     if index_px == prev_pixel {
-        return PixelEncoding::Index([u8::from(Op::Index) | hash, 0]);
+        return PixelEncoding::Index(u8::from(Op::Index) | hash);
     }
     cache[hash as usize] = curr_pixel;
 

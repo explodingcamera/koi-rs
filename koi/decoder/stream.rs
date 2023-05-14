@@ -61,7 +61,6 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
         Ok(())
     }
 
-    #[allow(dead_code)]
     #[inline]
     // somehow the faster version sometimes has issues with the hash function
     fn decode_pixels(&mut self, buf: &mut [u8], count: usize) -> std::io::Result<usize> {
@@ -298,10 +297,12 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
 // implement read trait for Decoder
 impl<R: Read, const C: usize> Read for PixelDecoder<R, C> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.read_pixels_fast(buf)
+        self.decode_pixels(buf, 100)
+        // self.read_pixels_fast(buf)
     }
 
     fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
-        self.read_pixels_fast(buf)
+        self.decode_pixels(buf, usize::MAX)
+        // self.read_pixels_fast(buf)
     }
 }
