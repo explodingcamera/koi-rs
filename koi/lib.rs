@@ -9,7 +9,7 @@ pub mod file;
 pub mod types;
 pub mod util;
 
-pub fn encode<WRITER: std::io::Write, READER: std::io::Read, const CHANNELS: usize>(
+pub fn encode<WRITER: std::io::Write, READER: std::io::Read, const C: usize>(
     header: file::FileHeader,
     reader: READER, // unbuffered reader, if you want to use a buffered reader (e.g. when reading a file), wrap it in a BufReader
     mut writer: WRITER,
@@ -17,8 +17,8 @@ pub fn encode<WRITER: std::io::Write, READER: std::io::Read, const CHANNELS: usi
     header.write(&mut writer)?;
 
     let mut encoder = match header.compression {
-        types::Compression::None => encoder::PixelEncoder::<WRITER, CHANNELS>::new_uncompressed,
-        types::Compression::Lz4 => encoder::PixelEncoder::<WRITER, CHANNELS>::new_lz4,
+        types::Compression::None => encoder::PixelEncoder::<WRITER, C>::new_uncompressed,
+        types::Compression::Lz4 => encoder::PixelEncoder::<WRITER, C>::new_lz4,
     }(writer, (header.width * header.height) as usize);
 
     encoder.encode(reader)?;
@@ -27,15 +27,15 @@ pub fn encode<WRITER: std::io::Write, READER: std::io::Read, const CHANNELS: usi
     Ok(())
 }
 
-pub fn decode<WRITER: std::io::Write, READER: std::io::Read, const CHANNELS: usize>(
+pub fn decode<WRITER: std::io::Write, READER: std::io::Read, const C: usize>(
     mut reader: READER,
     mut writer: WRITER,
 ) -> Result<FileHeader, KoiDecodeError> {
     let header = file::FileHeader::read(&mut reader)?;
 
     let mut decoder = match header.compression {
-        types::Compression::None => decoder::PixelDecoder::<READER, CHANNELS>::new_uncompressed,
-        types::Compression::Lz4 => decoder::PixelDecoder::<READER, CHANNELS>::new_lz4,
+        types::Compression::None => decoder::PixelDecoder::<READER, C>::new_uncompressed,
+        types::Compression::Lz4 => decoder::PixelDecoder::<READER, C>::new_lz4,
     }(reader, (header.width * header.height) as usize);
 
     decoder.decode(&mut writer)?;
@@ -81,6 +81,9 @@ pub enum KoiEncodeError {
 
     #[error("Invalid length")]
     InvalidLength,
+
+    #[error("Invalid header: {0}")]
+    InvalidHeader(String),
 
     #[error("Unsupported version: {0}")]
     UnsupportedVersion(u8),

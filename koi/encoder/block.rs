@@ -8,12 +8,13 @@ use crate::{
 // has to be devisible by 1, 2, 3 and 4 so chunks_exact works properly
 const CHUNK_SIZE: usize = MAX_CHUNK_SIZE; // about 200kb
 
-pub fn encode_to_vec<const CHANNELS: usize>(
+pub fn encode_to_vec<const C: usize>(
     data: &[u8],
     header: FileHeader,
+    compression_level: CompressionLevel,
 ) -> Result<Vec<u8>, KoiEncodeError> {
-    let mut out = vec![0; header.width as usize * header.height as usize * CHANNELS];
-    let len = encode::<CHANNELS>(data, &mut out, header)?;
+    let mut out = vec![0; header.width as usize * header.height as usize * C];
+    let len = encode::<C>(data, &mut out, header, compression_level)?;
     out.truncate(len);
 
     Ok(out)
@@ -23,9 +24,16 @@ pub fn encode<const C: usize>(
     data: &[u8],
     out: &mut [u8],
     header: FileHeader,
+    compression_level: CompressionLevel,
 ) -> Result<usize, KoiEncodeError> {
     if header.version != 1 {
         return Err(KoiEncodeError::UnsupportedVersion(header.version as u8));
+    }
+
+    if compression_level == CompressionLevel::None && header.compression != Compression::None {
+        return Err(KoiEncodeError::InvalidHeader(
+            "compression level is None but header.compression is not None".to_string(),
+        ));
     }
 
     let out_buf_cap = out.len();
@@ -53,7 +61,7 @@ pub fn encode<const C: usize>(
         let compress_size = compress(
             &out_chunk[..bytes_written],
             &mut out_buf[8..],
-            CompressionLevel::Lz4Hc(4), // diminishing returns after 4
+            compression_level.clone(), // diminishing returns after 4
         )?;
 
         let bytes_length: &[u8; 4] = &(compress_size as u32).to_le_bytes();
@@ -67,6 +75,7 @@ pub fn encode<const C: usize>(
     Ok(out_buf_cap - out_buf.len())
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CompressionLevel {
     Lz4Flex,
     Lz4(i32),

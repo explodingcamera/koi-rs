@@ -17,7 +17,7 @@ use crate::util::from_png;
 static RUNS: usize = 1;
 
 fn main() -> io::Result<()> {
-    let mut suites = generate_test_suites("images2");
+    let mut suites = generate_test_suites("images");
 
     println!(
         " \x1b[1mRunning benchmarks\x1b[0m ({} runs per image)",

@@ -19,13 +19,28 @@ pub fn decode_to_vec<const C: usize>(data: &[u8]) -> Result<Image, KoiDecodeErro
     }
 
     let mut out = vec![0; header.width as usize * header.height as usize * C];
-    let len = decode::<C>(&data, &mut out, header.clone())?;
+    let len = decode_impl::<C>(&data, &mut out, header.clone())?;
     out.truncate(len);
 
     Ok(Image { header, data: out })
 }
 
-fn decode<const C: usize>(
+pub fn decode<const C: usize>(
+    data: &[u8],
+    out: &mut [u8],
+) -> Result<(usize, FileHeader), KoiDecodeError> {
+    let data = Buffer::new(data);
+    let (data, header) = FileHeader::read_buf(data)?;
+
+    if header.version != 1 {
+        return Err(KoiDecodeError::UnsupportedVersion(header.version as u8));
+    }
+
+    let len = decode_impl::<C>(&data, out, header.clone())?;
+    Ok((len, header))
+}
+
+fn decode_impl<const C: usize>(
     data: &[u8],
     out: &mut [u8],
     header: FileHeader,

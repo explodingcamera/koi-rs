@@ -15,7 +15,7 @@ fn read_png(path: &str) -> (Vec<u8>, (u32, u32)) {
     (buf, (info.width, info.height))
 }
 
-const CHANNELS: usize = 3;
+const C: usize = 3;
 const FILE: &str = "koi-cli/tests/x_big.png";
 
 pub fn run() {
@@ -27,22 +27,21 @@ pub fn run() {
         None,
         width,
         height,
-        (CHANNELS as u8).try_into().unwrap(),
+        (C as u8).try_into().unwrap(),
         Compression::Lz4,
         None,
     );
 
-    encode::<_, _, CHANNELS>(header, &test_image[..], &mut out).expect("Failed to encode");
+    encode::<_, _, C>(header, &test_image[..], &mut out).expect("Failed to encode");
 
     let encoded_file = BufReader::new(File::open("test.koi").expect("Failed to open file"));
-    let mut decoded_file = Vec::with_capacity((width * height * (CHANNELS as u32)) as usize);
-    let _header =
-        decode::<_, _, CHANNELS>(encoded_file, &mut decoded_file).expect("Failed to decode");
+    let mut decoded_file = Vec::with_capacity((width * height * (C as u32)) as usize);
+    let _header = decode::<_, _, C>(encoded_file, &mut decoded_file).expect("Failed to decode");
 
     let out = File::create("test.png").expect("Failed to create file");
     let mut encoder = png::Encoder::new(out, width, height);
 
-    if CHANNELS == 3 {
+    if C == 3 {
         encoder.set_color(png::ColorType::Rgb);
     } else {
         encoder.set_color(png::ColorType::Rgba);

@@ -4,40 +4,9 @@ use std::io::Result;
 use super::ImageFormat;
 
 #[derive(Debug)]
-pub struct Koi0Lz4<const C: usize> {}
+pub struct Koi<const C: usize> {}
 
-impl<const C: usize> ImageFormat for Koi0Lz4<C> {
-    fn encode(&mut self, data: &[u8], dimensions: (u32, u32)) -> Result<Vec<u8>> {
-        let mut out = Vec::with_capacity(data.len() * 2);
-
-        koi::encode::<_, _, C>(
-            FileHeader::new(
-                0,
-                None,
-                dimensions.0,
-                dimensions.1,
-                (C as u8).try_into().expect("Koi: Invalid channel count"),
-                Compression::Lz4,
-                None,
-            ),
-            data,
-            &mut out,
-        )?;
-
-        Ok(out)
-    }
-
-    fn decode(&mut self, data: &[u8], _dimensions: (u32, u32)) -> Result<Vec<u8>> {
-        let mut out = vec![0; (data.len() * 3) / 2];
-        koi::decode::<_, _, C>(data, &mut out).map(|_| ())?;
-        Ok(out)
-    }
-}
-
-#[derive(Debug)]
-pub struct Koi2<const C: usize> {}
-
-impl<const C: usize> ImageFormat for Koi2<C> {
+impl<const C: usize> ImageFormat for Koi<C> {
     fn encode(&mut self, data: &[u8], dimensions: (u32, u32)) -> Result<Vec<u8>> {
         let header = FileHeader::new(
             1,
@@ -49,7 +18,41 @@ impl<const C: usize> ImageFormat for Koi2<C> {
             None,
         );
 
-        let data = koi::encoder::block::encode_to_vec::<C>(data, header)?;
+        let data = koi::encoder::block::encode_to_vec::<C>(
+            data,
+            header,
+            koi::encoder::block::CompressionLevel::Lz4Hc(4),
+        )?;
+        Ok(data)
+    }
+
+    fn decode(&mut self, data: &[u8], _dimensions: (u32, u32)) -> Result<Vec<u8>> {
+        let res = koi::decoder::block::decode_to_vec::<C>(data)?;
+        Ok(res.data)
+    }
+}
+
+#[derive(Debug)]
+pub struct KoiFast<const C: usize> {}
+
+impl<const C: usize> ImageFormat for KoiFast<C> {
+    fn encode(&mut self, data: &[u8], dimensions: (u32, u32)) -> Result<Vec<u8>> {
+        let header = FileHeader::new(
+            1,
+            None,
+            dimensions.0,
+            dimensions.1,
+            (C as u8).try_into().expect("Koi: Invalid channel count"),
+            Compression::Lz4,
+            None,
+        );
+
+        let data = koi::encoder::block::encode_to_vec::<C>(
+            data,
+            header,
+            koi::encoder::block::CompressionLevel::Lz4Flex,
+        )?;
+
         Ok(data)
     }
 

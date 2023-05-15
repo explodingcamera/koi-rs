@@ -10,9 +10,8 @@ use strum_macros::{Display, EnumIter};
 pub enum ImageFormatType {
     Png,
     PngFast,
-    // Koi,
-    Koi0Lz4,
-    Koi1,
+    Koi,
+    KoiFast,
     Qoi,
 }
 
@@ -21,9 +20,8 @@ impl ImageFormatType {
         match self {
             ImageFormatType::Png => Box::new(png::Png::<C> {}),
             ImageFormatType::PngFast => Box::new(png::PngFast::<C> {}),
-            // ImageFormatType::Koi => Box::new(koi::Koi::<C>::new()),
-            ImageFormatType::Koi0Lz4 => Box::new(koi::Koi0Lz4::<C> {}),
-            ImageFormatType::Koi1 => Box::new(koi::Koi2::<C> {}),
+            ImageFormatType::Koi => Box::new(koi::Koi::<C> {}),
+            ImageFormatType::KoiFast => Box::new(koi::KoiFast::<C> {}),
             ImageFormatType::Qoi => Box::new(qoi::Qoi::<C>::new()),
         }
     }
