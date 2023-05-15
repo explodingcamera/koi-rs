@@ -6,6 +6,8 @@
 //     ((r as u32 * 3 + g as u32 * 5 + b as u32 * 7 + a as u32 * 11) % CACHE_SIZE as u32) as u8
 // }
 
+use std::ops::{Deref, DerefMut};
+
 #[inline]
 #[cold]
 pub fn cold() {}
@@ -25,3 +27,94 @@ pub fn unlikely(b: bool) -> bool {
     }
     b
 }
+
+pub struct Buffer<'a>(&'a mut [u8]);
+
+pub trait Writer: Sized {
+    fn write_one(self, v: u8) -> Self;
+    fn write_many(self, v: &[u8]) -> Self;
+    fn capacity(&self) -> usize;
+}
+
+impl Deref for Buffer<'_> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl DerefMut for Buffer<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.0
+    }
+}
+
+impl<'a> Buffer<'a> {
+    pub fn new(buffer: &'a mut [u8]) -> Self {
+        Self(buffer)
+    }
+
+    #[inline]
+    fn write_one(self, v: u8) -> Self {
+        if let Some((first, tail)) = self.0.split_first_mut() {
+            *first = v;
+            Self(tail)
+        } else {
+            unreachable!()
+        }
+    }
+
+    #[inline]
+    fn write_many(self, v: &[u8]) -> Self {
+        if v.len() <= self.0.len() {
+            let (head, tail) = self.0.split_at_mut(v.len());
+            head.copy_from_slice(v);
+            Self(tail)
+        } else {
+            unreachable!()
+        }
+    }
+
+    pub fn trim_start(self, n: usize) -> Self {
+        if n <= self.0.len() {
+            let (_, tail) = self.0.split_at_mut(n);
+            Self(tail)
+        } else {
+            unreachable!()
+        }
+    }
+}
+
+impl<'a> Writer for Buffer<'a> {
+    #[inline]
+    fn write_one(self, v: u8) -> Self {
+        self.write_one(v)
+    }
+
+    #[inline]
+    fn write_many(self, v: &[u8]) -> Self {
+        self.write_many(v)
+    }
+
+    #[inline]
+    fn capacity(&self) -> usize {
+        self.0.len()
+    }
+}
+
+// impl<'a> Write for Buffer<'a> {
+//     #[inline]
+//     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+//         let len = std::cmp::min(buf.len(), self.0.len());
+//         self.0[..len].copy_from_slice(&buf[..len]);
+//         // self.0 = &mut self.0[len..];
+//         *self = self.trim_start(len);
+//         Ok(len)
+//     }
+
+//     #[inline]
+//     fn flush(&mut self) -> std::io::Result<()> {
+//         Ok(())
+//     }
+// }

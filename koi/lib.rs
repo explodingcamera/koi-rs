@@ -94,6 +94,16 @@ pub enum QoirEncodeError {
     UnsupportedVersion(u8),
 }
 
+#[derive(Error, Debug)]
+pub enum QoirError {
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    QoirEncodeError(#[from] QoirEncodeError),
+    #[error(transparent)]
+    QoirDecodeError(#[from] QoirDecodeError),
+}
+
 impl From<QoirEncodeError> for std::io::Error {
     fn from(err: QoirEncodeError) -> Self {
         match err {

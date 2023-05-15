@@ -14,7 +14,7 @@ use crate::suite::{generate_test_suites, FormatResult, Test};
 use crate::util::from_png;
 
 // how many times to run each test (to get the minimum time)
-static RUNS: usize = 4;
+static RUNS: usize = 1;
 
 fn main() -> io::Result<()> {
     let mut suites = generate_test_suites("images2");

@@ -2,6 +2,7 @@ use std::io::{Read, Write};
 
 use crate::{
     types::{Channels, Compression, MAGIC},
+    util::{Buffer, Writer},
     QoirDecodeError, QoirEncodeError,
 };
 use bson::{Binary, Document};
@@ -68,13 +69,8 @@ impl FileHeader {
         Ok(self.doc().to_writer(writer)?)
     }
 
-    pub fn write_to_buf(&self, buf: &mut [u8]) -> Result<usize, QoirEncodeError> {
-        buf[..MAGIC.len()].copy_from_slice(&MAGIC);
-
-        let mut header = vec![];
-        self.doc().to_writer(&mut header)?;
-        buf[MAGIC.len()..MAGIC.len() + header.len()].copy_from_slice(&header);
-        Ok(header.len() + MAGIC.len())
+    pub fn write_to_buf<'a>(&self, buf: Buffer<'a>) -> Result<Buffer<'a>, QoirEncodeError> {
+        Ok(buf.write_many(&self.write_to_vec()?))
     }
 
     pub fn write_to_vec(&self) -> Result<Vec<u8>, QoirEncodeError> {
