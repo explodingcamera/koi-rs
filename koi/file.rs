@@ -2,8 +2,8 @@ use std::io::{Read, Write};
 
 use crate::{
     types::{Channels, Compression, MAGIC},
-    util::{Buffer, Writer},
-    QoirDecodeError, QoirEncodeError,
+    util::{Buffer, BufferMut, Writer},
+    KoiDecodeError, KoiEncodeError,
 };
 use bson::{Binary, Document};
 
@@ -64,29 +64,29 @@ impl FileHeader {
         doc
     }
 
-    pub fn write<W: Write>(&self, writer: &mut W) -> Result<(), QoirEncodeError> {
+    pub fn write<W: Write>(&self, writer: &mut W) -> Result<(), KoiEncodeError> {
         writer.write_all(&MAGIC)?;
         Ok(self.doc().to_writer(writer)?)
     }
 
-    pub fn write_to_buf<'a>(&self, buf: Buffer<'a>) -> Result<Buffer<'a>, QoirEncodeError> {
+    pub fn write_to_buf<'a>(&self, buf: BufferMut<'a>) -> Result<BufferMut<'a>, KoiEncodeError> {
         Ok(buf.write_many(&self.write_to_vec()?))
     }
 
-    pub fn write_to_vec(&self) -> Result<Vec<u8>, QoirEncodeError> {
+    pub fn write_to_vec(&self) -> Result<Vec<u8>, KoiEncodeError> {
         let mut bytes = vec![];
         self.write(&mut bytes)?;
         Ok(bytes)
     }
 
-    pub fn check_magic(reader: &mut dyn Read) -> Result<(), QoirDecodeError> {
+    pub fn check_magic(reader: &mut dyn Read) -> Result<(), KoiDecodeError> {
         let mut magic = [0u8; MAGIC.len()];
         reader.read_exact(&mut magic).map_err(|_| {
-            QoirDecodeError::InvalidFileHeader("Failed to read magic number".to_string())
+            KoiDecodeError::InvalidFileHeader("Failed to read magic number".to_string())
         })?;
 
         if magic != MAGIC {
-            return Err(QoirDecodeError::InvalidFileHeader(
+            return Err(KoiDecodeError::InvalidFileHeader(
                 "Invalid magic number".to_string(),
             ));
         }
@@ -94,7 +94,17 @@ impl FileHeader {
         Ok(())
     }
 
-    pub fn parse(reader: &mut dyn Read) -> Result<FileHeader, QoirDecodeError> {
+    pub fn read_buf<'a>(buf: Buffer<'a>) -> Result<(Buffer<'a>, FileHeader), KoiDecodeError> {
+        let (len, header) = FileHeader::read_bytes(&buf)?;
+        Ok((buf.advance(len), header))
+    }
+
+    pub fn read_bytes(bytes: &[u8]) -> Result<(usize, FileHeader), KoiDecodeError> {
+        let mut reader = std::io::Cursor::new(bytes);
+        FileHeader::read(&mut reader).map(|header| (reader.position() as usize, header))
+    }
+
+    pub fn read(reader: &mut dyn Read) -> Result<FileHeader, KoiDecodeError> {
         FileHeader::check_magic(reader)?;
 
         let doc = Document::from_reader(reader).map_err(err("Failed to read file header"))?;
@@ -129,6 +139,6 @@ impl FileHeader {
     }
 }
 
-fn err<F>(e: &str) -> impl FnOnce(F) -> QoirDecodeError + '_ {
-    |_| QoirDecodeError::InvalidFileHeader(e.to_string())
+fn err<F>(e: &str) -> impl FnOnce(F) -> KoiDecodeError + '_ {
+    |_| KoiDecodeError::InvalidFileHeader(e.to_string())
 }

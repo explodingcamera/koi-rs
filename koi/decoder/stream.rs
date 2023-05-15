@@ -4,7 +4,7 @@ use std::io::{self, BufReader, Read, Write};
 use super::reader::Reader;
 use crate::{
     types::*,
-    util::{likely, unlikely},
+    util::{cold, likely, unlikely},
 };
 
 pub struct PixelDecoder<R: Read, const C: usize> {
@@ -185,7 +185,10 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
             OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END => 0,
             OP_DIFF..=OP_DIFF_END => 0,
             OP_LUMA..=OP_LUMA_END => 1,
-            _ => panic!("Invalid opcode {}", opcode),
+            _ => {
+                cold();
+                panic!("Invalid opcode {}", opcode)
+            }
         }
     }
 
@@ -238,7 +241,10 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
                 let b2 = buf_in[buffer_in_pos + 1];
                 self.last_px.apply_luma(b1, b2)
             }
-            _ => panic!("Invalid opcode {}", b1),
+            _ => {
+                cold();
+                panic!("Invalid opcode {}", b1)
+            }
         };
 
         buf_out[buffer_offset..buffer_offset + C].copy_from_slice(&pixel.data);

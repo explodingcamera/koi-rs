@@ -1,44 +1,117 @@
 use crate::{
     file::FileHeader,
-    types::{Channels, Op, Pixel},
-    util::{unlikely, Buffer, Writer},
-    QoirEncodeError,
+    types::{Channels, Op, Pixel, MAX_CHUNK_SIZE},
+    util::{unlikely, BufferMut, Writer},
+    KoiEncodeError,
 };
 
 // has to be devisible by 1, 2, 3 and 4 so chunks_exact works properly
-const CHUNK_SIZE: usize = 199992; // about 200kb
+const CHUNK_SIZE: usize = MAX_CHUNK_SIZE; // about 200kb
 
-// enum PixelEncoding {
-//     Diff(u8),
-//     AlphaDiff(u8),
-//     LumaDiff([u8; 2]),
-//     Gray([u8; 2]),
-//     GrayAlpha([u8; 3]),
-//     Rgba([u8; 5]),
-//     Rgb([u8; 4]),
-// }
+pub fn encode_to_vec<const CHANNELS: usize>(
+    data: &[u8],
+    header: FileHeader,
+) -> Result<Vec<u8>, KoiEncodeError> {
+    let mut out = vec![0; header.width as usize * header.height as usize * CHANNELS];
+    let len = encode::<CHANNELS>(data, &mut out, header)?;
+    out.truncate(len);
 
-// impl PixelEncoding {
-//     #[inline]
-//     fn write_to_buf(&self, buf: Buffer) -> Buffer {
-//         match self {
-//             PixelEncoding::Diff(data) => buf.write_one(*data),
-//             PixelEncoding::AlphaDiff(data) => buf.write_one(*data),
-//             PixelEncoding::LumaDiff(data) => buf.write_many(data),
-//             PixelEncoding::Gray(data) => buf.write_many(data),
-//             PixelEncoding::GrayAlpha(data) => buf.write_many(data),
-//             PixelEncoding::Rgba(data) => buf.write_many(data),
-//             PixelEncoding::Rgb(data) => buf.write_many(data),
-//         }
-//     }
-// }
+    Ok(out)
+}
+
+pub fn encode<const C: usize>(
+    data: &[u8],
+    out: &mut [u8],
+    header: FileHeader,
+) -> Result<usize, KoiEncodeError> {
+    if header.version != 1 {
+        return Err(KoiEncodeError::UnsupportedVersion(header.version as u8));
+    }
+
+    let out_buf_cap = out.len();
+    let mut out_buf = BufferMut::new(out);
+    out_buf = header.write_to_buf(out_buf)?;
+
+    let mut prev_pixel = Pixel::default();
+
+    const OUT_CHUNK_LEN: usize = CHUNK_SIZE * 2;
+    let mut out_chunk = [0; OUT_CHUNK_LEN];
+
+    for chunk in data.chunks(CHUNK_SIZE) {
+        let mut out_chunk_buf = BufferMut::new(&mut out_chunk);
+        let pixel_count = chunk.len() / C;
+
+        for px in chunk.chunks_exact(C) {
+            let px: [u8; C] = unsafe { px.try_into().unwrap_unchecked() };
+            let curr_pixel = px.into();
+            out_chunk_buf = encode_px::<C>(curr_pixel, prev_pixel, out_chunk_buf);
+            prev_pixel = curr_pixel;
+        }
+
+        let bytes_written = OUT_CHUNK_LEN - out_chunk_buf.len();
+
+        let compress_size = compress(
+            &out_chunk[..bytes_written],
+            &mut out_buf[8..],
+            CompressionLevel::Lz4Hc(8),
+        )?;
+
+        let bytes_length: &[u8; 4] = &(compress_size as u32).to_le_bytes();
+        let bytes_pixels: &[u8; 4] = &(pixel_count as u32).to_le_bytes();
+
+        out_buf = out_buf.write_many(bytes_length);
+        out_buf = out_buf.write_many(bytes_pixels);
+        out_buf = out_buf.advance(compress_size);
+    }
+
+    Ok(out_buf_cap - out_buf.len())
+}
+
+pub enum CompressionLevel {
+    Lz4Flex,
+    Lz4(i32),
+    Lz4Hc(i32),
+    None,
+}
+
+pub fn compress(
+    input: &[u8],
+    mut output: &mut [u8],
+    level: CompressionLevel,
+) -> Result<usize, KoiEncodeError> {
+    let out_size = match level {
+        CompressionLevel::Lz4(level) => {
+            lzzzz::lz4::compress(&input, &mut output, level).map_err(|e| {
+                println!("error: {}", e);
+                KoiEncodeError::InvalidLength
+            })?
+        }
+
+        CompressionLevel::Lz4Hc(level) => lzzzz::lz4_hc::compress(&input, &mut output, level)
+            .map_err(|e| {
+                println!("error: {}", e);
+                KoiEncodeError::InvalidLength
+            })?,
+
+        CompressionLevel::Lz4Flex => lz4_flex::compress_into(&input, &mut output).map_err(|e| {
+            println!("error: {}", e);
+            KoiEncodeError::InvalidLength
+        })?,
+        CompressionLevel::None => {
+            output[..input.len()].copy_from_slice(input);
+            input.len()
+        }
+    };
+
+    Ok(out_size)
+}
 
 #[inline]
 fn encode_px<'a, const C: usize>(
     curr_pixel: Pixel<C>,
     prev_pixel: Pixel<C>,
-    buf: Buffer<'a>,
-) -> Buffer<'a> {
+    buf: BufferMut<'a>,
+) -> BufferMut<'a> {
     if (C == 2 || C == 4) && curr_pixel.rgb() == prev_pixel.rgb() {
         if let Some(diff) = prev_pixel.alpha_diff(&curr_pixel) {
             return buf.write_one(diff);
@@ -56,7 +129,13 @@ fn encode_px<'a, const C: usize>(
         }
 
         // RGBA encoding (whenever alpha channel changes)
-        return buf.write_many(&curr_pixel.rgba());
+        return buf.write_many(&[
+            Op::Rgba as u8,
+            curr_pixel.r(),
+            curr_pixel.g(),
+            curr_pixel.b(),
+            curr_pixel.a(),
+        ]);
     }
 
     // Difference between current and previous pixel
@@ -84,78 +163,4 @@ fn encode_px<'a, const C: usize>(
         curr_pixel.g(),
         curr_pixel.b(),
     ])
-}
-
-pub fn encode_to_vec<const CHANNELS: usize>(
-    data: &[u8],
-    header: FileHeader,
-) -> Result<Vec<u8>, QoirEncodeError> {
-    let mut out = vec![0; header.width as usize * header.height as usize * CHANNELS];
-    let len = encode::<CHANNELS>(data, &mut out, header)?;
-    out.truncate(len);
-
-    Ok(out)
-}
-
-pub fn encode<const C: usize>(
-    data: &[u8],
-    out: &mut [u8],
-    header: FileHeader,
-) -> Result<usize, QoirEncodeError> {
-    if header.version != 1 {
-        return Err(QoirEncodeError::UnsupportedVersion(header.version as u8));
-    }
-
-    let mut out_buf = Buffer::new(out);
-    let out_buf_cap = out_buf.capacity();
-    out_buf = header.write_to_buf(out_buf)?;
-
-    let mut prev_pixel = Pixel::default();
-
-    const OUT_CHUNK_LEN: usize = CHUNK_SIZE * 2;
-    let mut out_chunk = [0; OUT_CHUNK_LEN];
-
-    for chunk in data.chunks(CHUNK_SIZE) {
-        let mut out_chunk_buf = Buffer::new(&mut out_chunk);
-
-        for px in chunk.chunks_exact(C) {
-            let px: [u8; C] = unsafe { px.try_into().unwrap_unchecked() };
-            let curr_pixel = px.into();
-            out_chunk_buf = encode_px::<C>(curr_pixel, prev_pixel, out_chunk_buf);
-            prev_pixel = curr_pixel;
-        }
-
-        let bytes_written = OUT_CHUNK_LEN - out_chunk_buf.len();
-
-        let compress_size = lz4_flex::compress_into(&out_chunk[..bytes_written], &mut out_buf)
-            .map_err(|e| {
-                println!("error: {}", e);
-                QoirEncodeError::InvalidLength
-            })?;
-        // lz4::block::compress_to_buffer(&out_chunk[..bytes_written], None, true, &mut out_buf)
-        //     .map_err(|e| {
-        //     println!("error: {}", e);
-        //     QoirEncodeError::InvalidLength
-        // })?;
-        // lzzzz::lz4_hc::compress(
-        //     &out_chunk[..bytes_written],
-        //     &mut out_buf,
-        //     12,
-        // ).map_err(|e| {
-        //     println!("error: {}", e);
-        //     QoirEncodeError::InvalidLength
-        // })?;
-        // lzzzz::lz4::compress(
-        //     &out_chunk[..bytes_written],
-        //     &mut out_buf,
-        //     12,
-        // ).map_err(|e| {
-        //     println!("error: {}", e);
-        //     QoirEncodeError::InvalidLength
-        // })?;
-
-        out_buf = out_buf.trim_start(compress_size);
-    }
-
-    Ok(out_buf_cap - out_buf.len())
 }

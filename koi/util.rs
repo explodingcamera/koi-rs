@@ -28,15 +28,33 @@ pub fn unlikely(b: bool) -> bool {
     b
 }
 
-pub struct Buffer<'a>(&'a mut [u8]);
+pub struct Buffer<'a>(&'a [u8]);
 
-pub trait Writer: Sized {
-    fn write_one(self, v: u8) -> Self;
-    fn write_many(self, v: &[u8]) -> Self;
-    fn capacity(&self) -> usize;
+impl<'a> Buffer<'a> {
+    pub fn new(buf: &'a [u8]) -> Self {
+        Self(buf)
+    }
+
+    pub fn read_one(self) -> (u8, Self) {
+        (self.0[0], Self(&self.0[1..]))
+    }
+
+    pub fn read_many(self, n: usize) -> (&'a [u8], Self) {
+        (&self.0[..n], Self(&self.0[n..]))
+    }
+
+    pub fn read_u32_le(self) -> (u32, Self) {
+        let (bytes, buf) = self.read_many(4);
+        let n = u32::from_le_bytes(bytes.try_into().expect("4 bytes"));
+        (n, buf)
+    }
+
+    pub fn advance(self, n: usize) -> Self {
+        Self(&self.0[n..])
+    }
 }
 
-impl Deref for Buffer<'_> {
+impl<'a> Deref for Buffer<'a> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
@@ -44,13 +62,29 @@ impl Deref for Buffer<'_> {
     }
 }
 
-impl DerefMut for Buffer<'_> {
+pub struct BufferMut<'a>(&'a mut [u8]);
+
+pub trait Writer: Sized {
+    fn write_one(self, v: u8) -> Self;
+    fn write_many(self, v: &[u8]) -> Self;
+    fn capacity(&self) -> usize;
+}
+
+impl Deref for BufferMut<'_> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl DerefMut for BufferMut<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.0
     }
 }
 
-impl<'a> Buffer<'a> {
+impl<'a> BufferMut<'a> {
     pub fn new(buffer: &'a mut [u8]) -> Self {
         Self(buffer)
     }
@@ -76,7 +110,7 @@ impl<'a> Buffer<'a> {
         }
     }
 
-    pub fn trim_start(self, n: usize) -> Self {
+    pub fn advance(self, n: usize) -> Self {
         if n <= self.0.len() {
             let (_, tail) = self.0.split_at_mut(n);
             Self(tail)
@@ -86,7 +120,7 @@ impl<'a> Buffer<'a> {
     }
 }
 
-impl<'a> Writer for Buffer<'a> {
+impl<'a> Writer for BufferMut<'a> {
     #[inline]
     fn write_one(self, v: u8) -> Self {
         self.write_one(v)

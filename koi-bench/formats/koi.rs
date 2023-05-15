@@ -4,9 +4,9 @@ use std::io::Result;
 use super::ImageFormat;
 
 #[derive(Debug)]
-pub struct KoiLz4<const C: usize> {}
+pub struct Koi0Lz4<const C: usize> {}
 
-impl<const C: usize> ImageFormat for KoiLz4<C> {
+impl<const C: usize> ImageFormat for Koi0Lz4<C> {
     fn encode(&mut self, data: &[u8], dimensions: (u32, u32)) -> Result<Vec<u8>> {
         let mut out = Vec::with_capacity(data.len() * 2);
 
@@ -54,8 +54,7 @@ impl<const C: usize> ImageFormat for Koi2<C> {
     }
 
     fn decode(&mut self, data: &[u8], _dimensions: (u32, u32)) -> Result<Vec<u8>> {
-        let mut out = vec![0; data.len() * 2];
-        koi::decode::<_, _, C>(data, &mut out).map(|_| ())?;
-        Ok(out)
+        let res = koi::decoder::block::decode_to_vec::<C>(data)?;
+        Ok(res.data)
     }
 }

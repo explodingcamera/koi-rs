@@ -1,9 +1,10 @@
-use crate::util::unlikely;
+use crate::util::{cold, unlikely};
 
 // magic number to identify koi files
 pub const MAGIC: [u8; 8] = *b"KOI \xF0\x9F\x99\x82";
 pub const MASK: u8 = 0xC0;
-pub const END_OF_IMAGE: [u8; 4] = *b"\xF0\x9F\x99\x82";
+pub const END_OF_IMAGE: [u8; 4] = 0u32.to_le_bytes();
+pub const MAX_CHUNK_SIZE: usize = 199992; // about 200kb
 
 // pub const OP_INDEX: u8 = 0x00;
 // pub const OP_INDEX_END: u8 = 0x3F;
@@ -17,6 +18,9 @@ pub const OP_DIFF_END: u8 = 0x00 | 0x3F;
 
 pub const OP_LUMA: u8 = 0x40;
 pub const OP_LUMA_END: u8 = 0x40 | 0x3F;
+
+// here, we now have 64 more opcodes to use in the future
+// IDEA: commonly used colors could be encoded as opcodes
 
 pub const OP_DIFF_ALPHA: u8 = 0xC0;
 pub const OP_DIFF_ALPHA_END: u8 = 0xC0 | 0x3b; // we only have 59 possible values for diff alpha so we can use the color opcodes
@@ -56,7 +60,10 @@ impl From<u8> for Op {
             OP_GRAY_ALPHA => Op::GrayAlpha,
             OP_RGB => Op::Rgb,
             OP_RGBA => Op::Rgba,
-            _ => panic!("Invalid opcode {}", op),
+            _ => {
+                cold();
+                panic!("Invalid opcode {}", op)
+            }
         }
     }
 }
@@ -176,8 +183,8 @@ impl<const C: usize> Pixel<C> {
         }
     }
 
-    pub fn apply_alpha_diff(&self, op: u8) -> Self {
-        let diff = (op & !(Op::DiffAlpha as u8)).wrapping_sub(0x1e);
+    pub fn apply_alpha_diff(&self, b1: u8) -> Self {
+        let diff = (b1 & !(Op::DiffAlpha as u8)).wrapping_sub(0x1e);
         let new_alpha = self.a().wrapping_add(diff);
         [self.r(), self.g(), self.b(), new_alpha].into()
     }
@@ -279,7 +286,10 @@ impl TryFrom<u8> for Channels {
             2 => Ok(Channels::GrayAlpha),
             3 => Ok(Channels::Rgb),
             4 => Ok(Channels::Rgba),
-            _ => Err(()),
+            _ => {
+                cold();
+                Err(())
+            }
         }
     }
 }

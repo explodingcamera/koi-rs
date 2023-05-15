@@ -161,19 +161,19 @@ fn run_test(
         let encode_size = output.len();
 
         // DECODE
-        let shortest_decode: u128 = u128::MAX;
-        // for _ in 0..RUNS {
-        //     let mut decoder = format.get_impl_dyn(channels);
-        //     let start = Instant::now();
+        let mut shortest_decode: u128 = u128::MAX;
+        for _ in 0..RUNS {
+            let mut decoder = format.get_impl_dyn(channels);
+            let start = Instant::now();
 
-        //     if let Err(e) = decoder.decode(black_box(&output), (width, height)) {
-        //         println!("Error decoding {format}, skipping: {e}");
-        //         errored = true;
-        //         continue 'outer;
-        //     }
+            if let Err(e) = black_box(decoder.decode(black_box(&output), (width, height))) {
+                println!("Error decoding {format}, skipping: {e}");
+                errored = true;
+                continue 'outer;
+            }
 
-        //     shortest_decode = std::cmp::min(shortest_decode, start.elapsed().as_micros())
-        // }
+            shortest_decode = std::cmp::min(shortest_decode, start.elapsed().as_micros())
+        }
 
         results.insert(
             format,
