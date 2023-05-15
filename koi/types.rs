@@ -1,4 +1,4 @@
-use crate::util::{cold, unlikely};
+use crate::util::cold;
 
 // magic number to identify koi files
 pub(crate) const MAGIC: [u8; 8] = *b"KOI \xF0\x9F\x99\x82";
@@ -13,13 +13,14 @@ pub(crate) const MAX_CHUNK_SIZE: usize = 199992; // about 200kb
 // pub const OP_LUMA_END: u8 = 0x80 | 0x3F;
 
 pub(crate) const OP_DIFF: u8 = 0x00;
-pub(crate) const OP_DIFF_END: u8 = 0x00 | 0x3F;
+pub(crate) const OP_DIFF_END: u8 = 0x3F;
 
 pub(crate) const OP_LUMA: u8 = 0x40;
 pub(crate) const OP_LUMA_END: u8 = 0x40 | 0x3F;
 
-// here, we now have 64 more opcodes to use in the future
-// IDEA: commonly used colors could be encoded as opcodes
+pub(crate) const OP_SAME: u8 = 0x80;
+
+// here, we now have 63 more opcodes to use in the future
 
 pub(crate) const OP_DIFF_ALPHA: u8 = 0xC0;
 pub(crate) const OP_DIFF_ALPHA_END: u8 = 0xC0 | 0x3b; // we only have 59 possible values for diff alpha so we can use the color opcodes
@@ -31,7 +32,6 @@ pub(crate) const OP_RGBA: u8 = 0xff;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub(crate) enum Op {
-    // Index = OP_INDEX,
     Diff = OP_DIFF,
     Luma = OP_LUMA,
     DiffAlpha = OP_DIFF_ALPHA,
@@ -115,11 +115,6 @@ impl<const C: usize> Pixel<C> {
     }
 
     #[inline]
-    pub fn rgba(&self) -> [u8; 4] {
-        [self.r(), self.g(), self.b(), self.a()]
-    }
-
-    #[inline]
     pub fn r(&self) -> u8 {
         self.data[0]
     }
@@ -166,7 +161,7 @@ impl<const C: usize> Pixel<C> {
     #[inline]
     pub fn is_gray(&self) -> bool {
         match C {
-            4 | 3 => unlikely(self.data[0] == self.data[1] && self.data[1] == self.data[2]),
+            4 | 3 => self.data[0] == self.data[1] && self.data[1] == self.data[2],
             2 | 1 => true,
             _ => unreachable!(),
         }
@@ -187,14 +182,14 @@ impl<const C: usize> Pixel<C> {
         let diff = a2.wrapping_sub(a1).wrapping_add(0x1e);
 
         match diff {
-            0x00..=0x3b => Some(Op::DiffAlpha as u8 | diff),
+            0x00..=0x3b => Some(OP_DIFF_ALPHA | diff),
             _ => None,
         }
     }
 
     #[inline]
     pub fn apply_alpha_diff(&self, b1: u8) -> Self {
-        let diff = (b1 & !(Op::DiffAlpha as u8)).wrapping_sub(0x1e);
+        let diff = (b1 & !(OP_DIFF_ALPHA)).wrapping_sub(0x1e);
         let new_alpha = self.a().wrapping_add(diff);
         [self.r(), self.g(), self.b(), new_alpha].into()
     }
@@ -230,7 +225,7 @@ impl Diff {
         let b = self.2.wrapping_add(2);
 
         match r | g | b {
-            0x00..=0x03 => Some(Op::Diff as u8 | (r << 4) | (g << 2) | b),
+            0x00..=0x03 => Some(OP_DIFF | (r << 4) | (g << 2) | b),
             _ => None,
         }
     }
@@ -241,7 +236,7 @@ impl Diff {
         let b = self.2.wrapping_add(8).wrapping_sub(self.1);
 
         match (r | b, g) {
-            (0x00..=0x0F, 0x00..=0x3F) => Some([Op::Luma as u8 | g, r << 4 | b]),
+            (0x00..=0x0F, 0x00..=0x3F) => Some([OP_LUMA | g, r << 4 | b]),
             _ => None,
         }
     }

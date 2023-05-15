@@ -94,6 +94,7 @@ impl FileHeader {
         Ok(())
     }
 
+    #[allow(clippy::all)] // clippy is making the code slower
     pub fn read_buf<'a>(buf: Buffer<'a>) -> Result<(Buffer<'a>, FileHeader), KoiDecodeError> {
         let (len, header) = FileHeader::read_bytes(&buf)?;
         Ok((buf.advance(len), header))

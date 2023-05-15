@@ -1,7 +1,7 @@
 use crate::{
     file::FileHeader,
-    types::{Channels, Op, Pixel, MAX_CHUNK_SIZE},
-    util::{unlikely, BufferMut, Writer},
+    types::*,
+    util::{BufferMut, Writer},
     KoiEncodeError,
 };
 
@@ -53,7 +53,7 @@ pub fn encode<const C: usize>(
         let compress_size = compress(
             &out_chunk[..bytes_written],
             &mut out_buf[8..],
-            CompressionLevel::Lz4Hc(8),
+            CompressionLevel::Lz4Hc(4), // diminishing returns after 4
         )?;
 
         let bytes_length: &[u8; 4] = &(compress_size as u32).to_le_bytes();
@@ -74,6 +74,7 @@ pub enum CompressionLevel {
     None,
 }
 
+#[allow(clippy::all)] // clippy is making the code slower
 pub fn compress(
     input: &[u8],
     mut output: &mut [u8],
@@ -106,29 +107,25 @@ pub fn compress(
     Ok(out_size)
 }
 
-#[inline]
+#[allow(clippy::all)] // clippy is making the code slower
 fn encode_px<'a, const C: usize>(
     curr_pixel: Pixel<C>,
     prev_pixel: Pixel<C>,
     buf: BufferMut<'a>,
 ) -> BufferMut<'a> {
+    if curr_pixel == prev_pixel {
+        return buf.write_one(OP_SAME);
+    }
+
     if (C == 2 || C == 4) && curr_pixel.rgb() == prev_pixel.rgb() {
         if let Some(diff) = prev_pixel.alpha_diff(&curr_pixel) {
             return buf.write_one(diff);
         }
     }
 
-    let is_gray = curr_pixel.is_gray();
-    if C != 1 && curr_pixel.a() != prev_pixel.a() && curr_pixel.a() != 255 {
-        if is_gray {
-            return buf.write_many(&[Op::GrayAlpha as u8, curr_pixel.r(), curr_pixel.a()]);
-        }
-
-        if unlikely(C != Channels::Rgba as u8 as usize) {
-            panic!("RGBA encoding is currently only supported for RGBA images");
-        }
-
-        // RGBA encoding (whenever alpha channel changes)
+    let is_transparent = curr_pixel.a() != 255;
+    if C == 4 && curr_pixel.a() != prev_pixel.a() && is_transparent {
+        // RGBA encoding (whenever alpha channel changes and rgb is not the same)
         return buf.write_many(&[
             Op::Rgba as u8,
             curr_pixel.r(),
@@ -138,23 +135,27 @@ fn encode_px<'a, const C: usize>(
         ]);
     }
 
+    let is_gray = curr_pixel.is_gray();
+    if is_gray {
+        if C == 2 && is_transparent {
+            return buf.write_many(&[Op::GrayAlpha as u8, curr_pixel.r(), curr_pixel.a()]);
+        }
+
+        // Gray encoding
+        return buf.write_many(&[Op::Gray as u8, curr_pixel.r()]);
+    }
+
     // Difference between current and previous pixel
     let diff = curr_pixel.diff(&prev_pixel);
-    let color_diff = diff.color();
 
     // Diff encoding
-    if let Some(diff) = color_diff {
+    if let Some(diff) = diff.color() {
         return buf.write_one(diff);
     }
 
     // Luma encoding
     if let Some(luma) = diff.luma() {
         return buf.write_many(&luma);
-    }
-
-    if is_gray {
-        // Gray encoding
-        return buf.write_many(&[Op::Gray as u8, curr_pixel.r()]);
     }
 
     buf.write_many(&[

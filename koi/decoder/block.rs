@@ -75,12 +75,13 @@ fn decode<const C: usize>(
     Ok(out_buf_cap - out_buf.len())
 }
 
-// inline can slow down the code according to benchmarks
+#[allow(clippy::all)] // clippy is making the code slower
 fn decode_px<'a, const C: usize>(
     data: &'a mut [u8],
     prev_pixel: Pixel<C>,
 ) -> (&'a mut [u8], Pixel<C>) {
     match data {
+        [OP_SAME, rest @ ..] => (rest, prev_pixel),
         [OP_GRAY, v, rest @ ..] => (rest, Pixel::<C>::from_grayscale(*v)),
         [OP_GRAY_ALPHA, v, a, rest @ ..] => (rest, Pixel::<C>::from([*v, *v, *v, *a])),
         [OP_RGB, r, g, b, rest @ ..] => (rest, Pixel::<C>::from([*r, *g, *b, 255])),
@@ -103,6 +104,7 @@ fn decode_px<'a, const C: usize>(
     }
 }
 
+#[allow(clippy::all)] // clippy is making the code slower
 fn decompress(
     data: &[u8],
     mut out: &mut [u8],
@@ -114,7 +116,14 @@ fn decompress(
             Ok(data.len())
         }
         Compression::Lz4 => {
-            let len = lz4_flex::block::decompress_into(&data, &mut out).map_err(|e| {
+            // let len = lz4_flex::block::decompress_into(&data, &mut out).map_err(|e| {
+            //     println!("error: {}", e);
+            //     KoiDecodeError::Decompress(e.to_string())
+            // })?;
+            // Ok(len)
+
+            // lzzz is slightly faster than lz4_flex, but not portable
+            let len = lzzzz::lz4::decompress(&data, &mut out).map_err(|e| {
                 println!("error: {}", e);
                 KoiDecodeError::Decompress(e.to_string())
             })?;
