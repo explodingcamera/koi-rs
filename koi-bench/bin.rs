@@ -14,7 +14,7 @@ use crate::suite::{generate_test_suites, FormatResult, Test};
 use crate::util::from_png;
 
 // how many times to run each test (to get the minimum time)
-static RUNS: usize = 1;
+static RUNS: usize = 2;
 
 fn main() -> io::Result<()> {
     let mut suites = generate_test_suites("images");
@@ -67,7 +67,7 @@ fn main() -> io::Result<()> {
             .filter(|t| !t.errored)
             .collect::<Vec<_>>();
 
-        print_results(successfull_tests, &suite.name);
+        print_results(successfull_tests, &suite.name, TimeFormat::Milliseconds);
     }
 
     let all_tests = suites
@@ -76,12 +76,17 @@ fn main() -> io::Result<()> {
         .filter(|t| !t.errored)
         .collect::<Vec<_>>();
 
-    print_results(all_tests, "Overall");
+    print_results(all_tests, "Overall", TimeFormat::Seconds);
 
     Ok(())
 }
 
-fn print_results(tests: Vec<&Test>, title: &str) {
+enum TimeFormat {
+    Milliseconds,
+    Seconds,
+}
+
+fn print_results(tests: Vec<&Test>, title: &str, time_format: TimeFormat) {
     let total_input_size: usize = tests.iter().map(|t| t.input_size).sum();
 
     if total_input_size == 0 {
@@ -109,15 +114,30 @@ fn print_results(tests: Vec<&Test>, title: &str) {
             .map(|t| t.results.get(&format).unwrap().decode_min_time)
             .sum();
 
-        println!(
-            // "{format}: {size}kb - {encode}ms - {decode}ms - {compression_rate}",
-            // only print the first 2 digits after the comma for compression rate
-            "│ {format: <7} │ {encode: >5}ms │ {decode: >5}ms │ {compression_rate:>5.2} │",
-            format = format,
-            encode = total_time_encode / 1000,
-            decode = total_time_decode / 1000,
-            compression_rate = total_size as f64 / total_input_size as f64
-        );
+        match time_format {
+            TimeFormat::Milliseconds => {
+                println!(
+                    // "{format}: {size}kb - {encode}ms - {decode}ms - {compression_rate}",
+                    // only print the first 2 digits after the comma for compression rate
+                    "│ {format: <7} │ {encode: >5}ms │ {decode: >5}ms │ {compression_rate:>5.2} │",
+                    format = format,
+                    encode = total_time_encode / 1000,
+                    decode = total_time_decode / 1000,
+                    compression_rate = total_size as f64 / total_input_size as f64
+                );
+            }
+            TimeFormat::Seconds => {
+                println!(
+                    // "{format}: {size}kb - {encode}ms - {decode}ms - {compression_rate}",
+                    // only print the first 2 digits after the comma for compression rate
+                    "│ {format: <7} │ {encode: >6.2}s │ {decode: >6.2}s │ {compression_rate:>5.2} │",
+                    format = format,
+                    encode = total_time_encode as f64 / 1000.0 / 1000.0,
+                    decode = total_time_decode as f64 / 1000.0 / 1000.0,
+                    compression_rate = total_size as f64 / total_input_size as f64
+                );
+            }
+        }
     }
     println!("└─────────┴─────────┴─────────┴───────┘");
 }

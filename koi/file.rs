@@ -29,6 +29,10 @@ fn to_binary(bytes: Vec<u8>) -> Binary {
 }
 
 impl FileHeader {
+    pub fn min_output_size(&self) -> usize {
+        self.width as usize * self.height as usize * self.channels as usize * self.channels as usize
+    }
+
     pub fn new(
         version: u32,
         exif: Option<Vec<u8>>,

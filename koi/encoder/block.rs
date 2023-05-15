@@ -64,6 +64,10 @@ pub fn encode<const C: usize>(
             compression_level.clone(), // diminishing returns after 4
         )?;
 
+        if compress_size > ((MAX_CHUNK_SIZE * 3) / 2) {
+            panic!("compress_size > MAX_CHUNK_SIZE");
+        }
+
         let bytes_length: &[u8; 4] = &(compress_size as u32).to_le_bytes();
         let bytes_pixels: &[u8; 4] = &(pixel_count as u32).to_le_bytes();
 

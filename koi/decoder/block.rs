@@ -18,11 +18,15 @@ pub fn decode_to_vec<const C: usize>(data: &[u8]) -> Result<Image, KoiDecodeErro
         return Err(KoiDecodeError::UnsupportedVersion(header.version as u8));
     }
 
-    let mut out = vec![0; header.width as usize * header.height as usize * C];
+    let mut out = vec![0; header.min_output_size()];
     let len = decode_impl::<C>(&data, &mut out, header.clone())?;
     out.truncate(len);
 
     Ok(Image { header, data: out })
+}
+
+pub fn min_output_size<const C: usize>(data: &[u8]) -> usize {
+    FileHeader::read_bytes(data).unwrap().1.min_output_size()
 }
 
 pub fn decode<const C: usize>(
@@ -51,7 +55,7 @@ fn decode_impl<const C: usize>(
     let mut out_buf = BufferMut::new(out);
 
     let mut prev_pixel = Pixel::<C>::default();
-    let mut out_chunk = [0; MAX_CHUNK_SIZE];
+    let mut out_chunk = [0; (MAX_CHUNK_SIZE * 2)];
 
     loop {
         if data.is_empty() {
@@ -67,8 +71,8 @@ fn decode_impl<const C: usize>(
             break;
         }
 
-        if unlikely(len > MAX_CHUNK_SIZE as u32) {
-            panic!("chunk too big");
+        if unlikely(len as usize > (MAX_CHUNK_SIZE * 2)) {
+            panic!("chunk too big: {}", len);
         }
 
         let decompress_size =
