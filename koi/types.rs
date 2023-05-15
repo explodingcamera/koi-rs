@@ -1,10 +1,9 @@
 use crate::util::{cold, unlikely};
 
 // magic number to identify koi files
-pub const MAGIC: [u8; 8] = *b"KOI \xF0\x9F\x99\x82";
-pub const MASK: u8 = 0xC0;
-pub const END_OF_IMAGE: [u8; 4] = 0u32.to_le_bytes();
-pub const MAX_CHUNK_SIZE: usize = 199992; // about 200kb
+pub(crate) const MAGIC: [u8; 8] = *b"KOI \xF0\x9F\x99\x82";
+pub(crate) const END_OF_IMAGE: [u8; 4] = 0u32.to_le_bytes();
+pub(crate) const MAX_CHUNK_SIZE: usize = 199992; // about 200kb
 
 // pub const OP_INDEX: u8 = 0x00;
 // pub const OP_INDEX_END: u8 = 0x3F;
@@ -13,25 +12,25 @@ pub const MAX_CHUNK_SIZE: usize = 199992; // about 200kb
 // pub const OP_LUMA: u8 = 0x80;
 // pub const OP_LUMA_END: u8 = 0x80 | 0x3F;
 
-pub const OP_DIFF: u8 = 0x00;
-pub const OP_DIFF_END: u8 = 0x00 | 0x3F;
+pub(crate) const OP_DIFF: u8 = 0x00;
+pub(crate) const OP_DIFF_END: u8 = 0x00 | 0x3F;
 
-pub const OP_LUMA: u8 = 0x40;
-pub const OP_LUMA_END: u8 = 0x40 | 0x3F;
+pub(crate) const OP_LUMA: u8 = 0x40;
+pub(crate) const OP_LUMA_END: u8 = 0x40 | 0x3F;
 
 // here, we now have 64 more opcodes to use in the future
 // IDEA: commonly used colors could be encoded as opcodes
 
-pub const OP_DIFF_ALPHA: u8 = 0xC0;
-pub const OP_DIFF_ALPHA_END: u8 = 0xC0 | 0x3b; // we only have 59 possible values for diff alpha so we can use the color opcodes
-pub const OP_GRAY: u8 = 0xfc;
-pub const OP_GRAY_ALPHA: u8 = 0xfd;
-pub const OP_RGB: u8 = 0xfe;
-pub const OP_RGBA: u8 = 0xff;
+pub(crate) const OP_DIFF_ALPHA: u8 = 0xC0;
+pub(crate) const OP_DIFF_ALPHA_END: u8 = 0xC0 | 0x3b; // we only have 59 possible values for diff alpha so we can use the color opcodes
+pub(crate) const OP_GRAY: u8 = 0xfc;
+pub(crate) const OP_GRAY_ALPHA: u8 = 0xfd;
+pub(crate) const OP_RGB: u8 = 0xfe;
+pub(crate) const OP_RGBA: u8 = 0xff;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
-pub enum Op {
+pub(crate) enum Op {
     // Index = OP_INDEX,
     Diff = OP_DIFF,
     Luma = OP_LUMA,
@@ -69,7 +68,7 @@ impl From<u8> for Op {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Pixel<const C: usize> {
+pub(crate) struct Pixel<const C: usize> {
     pub data: [u8; C],
 }
 
@@ -110,18 +109,22 @@ impl<const C: usize> From<&[u8]> for Pixel<C> {
 }
 
 impl<const C: usize> Pixel<C> {
+    #[inline]
     pub fn rgb(&self) -> [u8; 3] {
         [self.r(), self.g(), self.b()]
     }
 
+    #[inline]
     pub fn rgba(&self) -> [u8; 4] {
         [self.r(), self.g(), self.b(), self.a()]
     }
 
+    #[inline]
     pub fn r(&self) -> u8 {
         self.data[0]
     }
 
+    #[inline]
     pub fn g(&self) -> u8 {
         match C {
             3 | 4 => self.data[1],
@@ -130,6 +133,7 @@ impl<const C: usize> Pixel<C> {
         }
     }
 
+    #[inline]
     pub fn b(&self) -> u8 {
         match C {
             3 | 4 => self.data[2],
@@ -138,6 +142,7 @@ impl<const C: usize> Pixel<C> {
         }
     }
 
+    #[inline]
     pub fn a(&self) -> u8 {
         match C {
             4 => self.data[3],
@@ -147,6 +152,7 @@ impl<const C: usize> Pixel<C> {
         }
     }
 
+    #[inline]
     pub fn from_grayscale(gray: u8) -> Self {
         match C {
             3 => [gray, gray, gray, 0xff].into(),
@@ -157,6 +163,7 @@ impl<const C: usize> Pixel<C> {
         }
     }
 
+    #[inline]
     pub fn is_gray(&self) -> bool {
         match C {
             4 | 3 => unlikely(self.data[0] == self.data[1] && self.data[1] == self.data[2]),
@@ -165,6 +172,7 @@ impl<const C: usize> Pixel<C> {
         }
     }
 
+    #[inline]
     pub fn diff(&self, other: &Self) -> Diff {
         let r = self.r().wrapping_sub(other.r());
         let g = self.g().wrapping_sub(other.g());
@@ -172,6 +180,7 @@ impl<const C: usize> Pixel<C> {
         Diff(r, g, b)
     }
 
+    #[inline]
     pub fn alpha_diff(&self, other: &Self) -> Option<u8> {
         let a1 = self.a();
         let a2 = other.a();
@@ -183,12 +192,14 @@ impl<const C: usize> Pixel<C> {
         }
     }
 
+    #[inline]
     pub fn apply_alpha_diff(&self, b1: u8) -> Self {
         let diff = (b1 & !(Op::DiffAlpha as u8)).wrapping_sub(0x1e);
         let new_alpha = self.a().wrapping_add(diff);
         [self.r(), self.g(), self.b(), new_alpha].into()
     }
 
+    #[inline]
     pub fn apply_diff(&self, b1: u8) -> Self {
         let r = self.r().wrapping_add(b1 >> 4 & 0x03).wrapping_sub(2);
         let g = self.g().wrapping_add(b1 >> 2 & 0x03).wrapping_sub(2);
@@ -197,6 +208,7 @@ impl<const C: usize> Pixel<C> {
         [r, g, b].into()
     }
 
+    #[inline]
     pub fn apply_luma(&self, b1: u8, b2: u8) -> Self {
         let vg = (b1 & 0x3f).wrapping_sub(32);
         let vr = ((b2 >> 4) & 0x0f).wrapping_sub(8).wrapping_add(vg);
@@ -208,20 +220,6 @@ impl<const C: usize> Pixel<C> {
 
         [r, g, b, self.a()].into()
     }
-
-    // #[inline]
-    // pub fn hash(self) -> u8 {
-    //     // index_position = (r * 3 + g * 5 + b * 7 + a * 11) % 64
-    //     let (r, g, b, a) = match C {
-    //         4 => (self.data[0], self.data[1], self.data[2], self.data[3]),
-    //         3 => (self.data[0], self.data[1], self.data[2], 0xff),
-    //         2 => (self.data[0], self.data[0], self.data[0], self.data[1]),
-    //         1 => (self.data[0], self.data[0], self.data[0], 0xff),
-    //         _ => unreachable!(),
-    //     };
-
-    //     ((r as u32 * 3 + g as u32 * 5 + b as u32 * 7 + a as u32 * 11) % CACHE_SIZE as u32) as u8
-    // }
 }
 
 pub struct Diff(u8, u8, u8);

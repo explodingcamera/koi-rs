@@ -60,12 +60,12 @@ fn decode<const C: usize>(
             decompress(&data[..len as usize], &mut out_chunk, header.compression)?;
         data = data.advance(len as usize);
 
-        let mut out_chunk_buf = BufferMut::new(&mut out_chunk[..decompress_size]);
+        let mut out_chunk_buf = &mut out_chunk[..decompress_size];
 
         // iterate pixels times
         for _ in 0..pixels {
-            let (buf, px) = decode_px::<C>(out_chunk_buf, prev_pixel);
-            out_chunk_buf = buf;
+            let px: Pixel<C>;
+            (out_chunk_buf, px) = decode_px::<C>(out_chunk_buf, prev_pixel);
 
             prev_pixel = px;
             out_buf = out_buf.write_many(&px.data);
@@ -75,41 +75,23 @@ fn decode<const C: usize>(
     Ok(out_buf_cap - out_buf.len())
 }
 
-#[inline]
+// inline can slow down the code according to benchmarks
 fn decode_px<'a, const C: usize>(
-    buf: BufferMut<'a>,
+    data: &'a mut [u8],
     prev_pixel: Pixel<C>,
-) -> (BufferMut<'a>, Pixel<C>) {
-    match *buf {
-        [OP_GRAY, v, ..] => {
-            let px = Pixel::<C>::from_grayscale(v);
-            (buf.advance(2), px)
-        }
-        [OP_GRAY_ALPHA, v, a, ..] => {
-            let px = Pixel::<C>::from([v, v, v, a]);
-            (buf.advance(3), px)
-        }
-        [OP_RGB, r, g, b, ..] => {
-            let px = Pixel::<C>::from([r, g, b, 255]);
-            (buf.advance(4), px)
+) -> (&'a mut [u8], Pixel<C>) {
+    match data {
+        [OP_GRAY, v, rest @ ..] => (rest, Pixel::<C>::from_grayscale(*v)),
+        [OP_GRAY_ALPHA, v, a, rest @ ..] => (rest, Pixel::<C>::from([*v, *v, *v, *a])),
+        [OP_RGB, r, g, b, rest @ ..] => (rest, Pixel::<C>::from([*r, *g, *b, 255])),
+        [OP_RGBA, r, g, b, a, rest @ ..] => (rest, Pixel::<C>::from([*r, *g, *b, *a])),
+
+        [b1 @ OP_DIFF..=OP_DIFF_END, rest @ ..] => (rest, prev_pixel.apply_diff(*b1)),
+        [b1 @ OP_LUMA..=OP_LUMA_END, b2, rest @ ..] => (rest, prev_pixel.apply_luma(*b1, *b2)),
+        [b1 @ OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END, rest @ ..] => {
+            (rest, prev_pixel.apply_alpha_diff(*b1))
         }
 
-        [OP_RGBA, r, g, b, a, ..] => {
-            let px = Pixel::<C>::from([r, g, b, a]);
-            (buf.advance(5), px)
-        }
-        [b1 @ OP_DIFF_ALPHA..=OP_DIFF_ALPHA_END, ..] => {
-            let px = prev_pixel.apply_alpha_diff(b1);
-            (buf.advance(1), px)
-        }
-        [b1 @ OP_DIFF..=OP_DIFF_END, ..] => {
-            let px = prev_pixel.apply_diff(b1);
-            (buf.advance(1), px)
-        }
-        [b1 @ OP_LUMA..=OP_LUMA_END, b2, ..] => {
-            let px = prev_pixel.apply_luma(b1, b2);
-            (buf.advance(2), px)
-        }
         [opcode, ..] => {
             cold();
             panic!("Invalid opcode {}", opcode);
@@ -121,7 +103,7 @@ fn decode_px<'a, const C: usize>(
     }
 }
 
-pub fn decompress(
+fn decompress(
     data: &[u8],
     mut out: &mut [u8],
     compression: Compression,

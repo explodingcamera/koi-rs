@@ -58,6 +58,9 @@ pub enum KoiDecodeError {
     #[error("Invalid file header: {0}")]
     InvalidFileHeader(String),
 
+    #[error("Invalid chunk length")]
+    InvalidChunkLength,
+
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
