@@ -1,7 +1,7 @@
 use crate::util::cold;
 
 // magic number to identify koi files
-pub(crate) const MAGIC: [u8; 8] = *b"KOI \xF0\x9F\x99\x82";
+pub(crate) const MAGIC: [u8; 4] = *b"KOI ";
 pub(crate) const END_OF_IMAGE: [u8; 4] = 0u32.to_le_bytes();
 pub(crate) const MAX_CHUNK_SIZE: usize = 199992; // about 200kb
 
