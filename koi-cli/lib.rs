@@ -30,6 +30,7 @@ pub fn run() {
         (C as u8).try_into().unwrap(),
         Compression::Lz4,
         None,
+        None,
     );
 
     encode::<_, _, C>(header, &test_image[..], &mut out).expect("Failed to encode");
