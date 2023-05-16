@@ -11,10 +11,11 @@ impl<const C: usize> ImageFormat for Koi<C> {
         let header = FileHeader::new(
             1,
             None,
-            dimensions.0,
-            dimensions.1,
+            dimensions.0 as u64,
+            dimensions.1 as u64,
             (C as u8).try_into().expect("Koi: Invalid channel count"),
             Compression::Lz4,
+            None,
             None,
         );
 
@@ -40,10 +41,11 @@ impl<const C: usize> ImageFormat for KoiFast<C> {
         let header = FileHeader::new(
             1,
             None,
-            dimensions.0,
-            dimensions.1,
+            dimensions.0 as u64,
+            dimensions.1 as u64,
             (C as u8).try_into().expect("Koi: Invalid channel count"),
             Compression::Lz4,
+            None,
             None,
         );
 

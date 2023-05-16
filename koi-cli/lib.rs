@@ -25,8 +25,8 @@ pub fn run() {
     let header = FileHeader::new(
         0,
         None,
-        width,
-        height,
+        width as u64,
+        height as u64,
         (C as u8).try_into().unwrap(),
         Compression::Lz4,
         None,

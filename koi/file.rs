@@ -11,8 +11,8 @@ use bson::{Binary, Document};
 pub struct FileHeader {
     pub version: u32,             // v
     pub exif: Option<Vec<u8>>,    // e
-    pub width: u32,               // w
-    pub height: u32,              // h
+    pub width: u64,               // w
+    pub height: u64,              // h
     pub channels: Channels,       // c
     pub compression: Compression, // x
     pub color_space: u32,         // s
@@ -37,8 +37,8 @@ impl FileHeader {
     pub fn new(
         version: u32,
         exif: Option<Vec<u8>>,
-        width: u32,
-        height: u32,
+        width: u64,
+        height: u64,
         channels: Channels,
         compression: Compression,
         block_size: Option<u32>,
@@ -59,8 +59,8 @@ impl FileHeader {
     fn doc(&self) -> Document {
         let mut doc = Document::new();
         doc.insert("v", self.version as i32);
-        doc.insert("w", self.width as i32);
-        doc.insert("h", self.height as i32);
+        doc.insert("w", self.width as i64);
+        doc.insert("h", self.height as i64);
         doc.insert("c", self.channels as i32);
         doc.insert("x", self.compression as i32);
         doc.insert("s", self.color_space as i32);
@@ -122,8 +122,8 @@ impl FileHeader {
             doc.get_i32("v")
                 .map_err(err("Failed to read file version"))? as u32,
             doc.get_binary_generic("e").ok().map(|b| b.to_vec()),
-            doc.get_i32("w").map_err(err("Failed to read width"))? as u32,
-            doc.get_i32("h").map_err(err("Failed to read height"))? as u32,
+            doc.get_i64("w").map_err(err("Failed to read width"))? as u64,
+            doc.get_i64("h").map_err(err("Failed to read height"))? as u64,
             doc.get_i32("c").map_err(err("Failed to read channels"))? as u32,
             doc.get_i32("x")
                 .map_err(err("Failed to read compression"))? as u32,
