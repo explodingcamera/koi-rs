@@ -4,6 +4,7 @@ members = [
   "koi",
   "koi-cli",
   "koi-bench",
+  "playground",
 ]
 
 [profile.release]
