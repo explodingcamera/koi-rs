@@ -61,7 +61,7 @@ pub fn encode<const C: usize>(
         let compress_size = compress(
             &out_chunk[..bytes_written],
             &mut out_buf[8..],
-            compression_level.clone(), // diminishing returns after 4
+            compression_level, // diminishing returns after 4
         )?;
 
         if compress_size > ((MAX_CHUNK_SIZE * 3) / 2) {

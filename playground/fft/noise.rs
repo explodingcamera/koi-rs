@@ -1,11 +1,8 @@
 use image::{ImageBuffer, RgbImage};
-use ndarray::{Array2, Zip};
+use ndarray::Array2;
 use num_complex::Complex;
 
-use crate::{
-    plot::visualize_frequencies,
-    util::{self, reduce_high_frequency_noise},
-};
+use crate::util::{self, reduce_high_frequency_noise};
 
 pub fn run(file_name: &str) {
     let image = util::read_png(file_name);

@@ -1,15 +1,15 @@
 [package]
-edition = "2021"
-name = "koi-cli"
-version = "0.1.0"
+edition="2021"
+name="koi-cli"
+version="0.1.0"
 
 [lib]
-path = "lib.rs"
+path="lib.rs"
 
 [[bin]]
-name = "koi"
-path = "bin.rs"
+name="koi"
+path="bin.rs"
 
 [dependencies]
-koi = {path = "../koi"}
-png = "0.17.8"
+koi={path="../koi"}
+png="0.17.8"

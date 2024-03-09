@@ -1,19 +1,19 @@
 [package]
-edition = "2021"
-name = "koi-bench"
-version = "0.1.0"
+edition="2021"
+name="koi-bench"
+version="0.1.0"
 
 [[bin]]
-name = "koi-bench"
-path = "bin.rs"
+name="koi-bench"
+path="bin.rs"
 
 [dependencies]
-indicatif = "0.17"
-strum = "0.25"
-strum_macros = "0.25"
-walkdir = "2.3"
+indicatif="0.17"
+strum="0.26"
+strum_macros="0.26"
+walkdir="2.3"
 
-koi = {path = "../koi"}
-png = "0.17.8"
-qoi = "0.4"
-webp = "0.2.2"
+koi={path="../koi"}
+png="0.17.8"
+qoi="0.4"
+webp="0.2.2"

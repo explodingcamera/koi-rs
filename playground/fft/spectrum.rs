@@ -1,5 +1,5 @@
 use image::{ImageBuffer, RgbImage};
-use ndarray::{Array2, Zip};
+use ndarray::{Array2};
 use num_complex::Complex;
 
 use crate::{plot::visualize_frequencies, util};

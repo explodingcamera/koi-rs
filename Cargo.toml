@@ -1,12 +1,7 @@
 [workspace]
-members = [
-  "koi",
-  "koi-cli",
-  "koi-bench",
-  "playground",
-]
-resolver = "2"
+members=["koi", "koi-cli", "koi-bench", "playground"]
+resolver="2"
 
 [profile.release]
-debug = true
-opt-level = 3
+debug=true
+opt-level=3
