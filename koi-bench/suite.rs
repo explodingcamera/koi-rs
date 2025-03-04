@@ -12,7 +12,6 @@ pub struct FormatResult {
 
 #[derive(Debug)]
 pub struct Test {
-    pub name: String,
     pub input_size: usize,
     pub results: BTreeMap<ImageFormatType, FormatResult>,
     pub errored: bool,

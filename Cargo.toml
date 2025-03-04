@@ -1,6 +1,6 @@
 [workspace]
-members=["koi", "koi-cli", "koi-bench", "playground"]
-resolver="2"
+members=["koi", "koi-cli", "koi-bench"]
+resolver="3"
 
 [profile.release]
 debug=true

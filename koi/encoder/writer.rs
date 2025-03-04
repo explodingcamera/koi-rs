@@ -16,22 +16,22 @@ impl<W: Write> Writer<W> {
 impl<W: Write> Write for Writer<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
-            Writer::Lz4Encoder(ref mut encoder) => encoder.write(buf),
-            Writer::UncompressedEncoder(ref mut encoder) => encoder.write(buf),
+            Writer::Lz4Encoder(encoder) => encoder.write(buf),
+            Writer::UncompressedEncoder(encoder) => encoder.write(buf),
         }
     }
 
     fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
         match self {
-            Writer::Lz4Encoder(ref mut encoder) => encoder.write_all(buf),
-            Writer::UncompressedEncoder(ref mut encoder) => encoder.write_all(buf),
+            Writer::Lz4Encoder(encoder) => encoder.write_all(buf),
+            Writer::UncompressedEncoder(encoder) => encoder.write_all(buf),
         }
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
         match self {
-            Writer::Lz4Encoder(ref mut encoder) => encoder.flush(),
-            Writer::UncompressedEncoder(ref mut encoder) => encoder.flush(),
+            Writer::Lz4Encoder(encoder) => encoder.flush(),
+            Writer::UncompressedEncoder(encoder) => encoder.flush(),
         }
     }
 }

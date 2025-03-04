@@ -196,8 +196,8 @@ impl<const C: usize> Pixel<C> {
 
     #[inline]
     pub fn apply_diff(&self, b1: u8) -> Self {
-        let r = self.r().wrapping_add(b1 >> 4 & 0x03).wrapping_sub(2);
-        let g = self.g().wrapping_add(b1 >> 2 & 0x03).wrapping_sub(2);
+        let r = self.r().wrapping_add((b1 >> 4) & 0x03).wrapping_sub(2);
+        let g = self.g().wrapping_add((b1 >> 2) & 0x03).wrapping_sub(2);
         let b = self.b().wrapping_add(b1 & 0x03).wrapping_sub(2);
 
         [r, g, b].into()
@@ -236,7 +236,7 @@ impl Diff {
         let b = self.2.wrapping_add(8).wrapping_sub(self.1);
 
         match (r | b, g) {
-            (0x00..=0x0F, 0x00..=0x3F) => Some([OP_LUMA | g, r << 4 | b]),
+            (0x00..=0x0F, 0x00..=0x3F) => Some([OP_LUMA | g, (r << 4) | b]),
             _ => None,
         }
     }

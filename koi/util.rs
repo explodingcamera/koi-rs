@@ -46,7 +46,7 @@ impl<'a> Buffer<'a> {
     }
 }
 
-impl<'a> Deref for Buffer<'a> {
+impl Deref for Buffer<'_> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
@@ -112,7 +112,7 @@ impl<'a> BufferMut<'a> {
     }
 }
 
-impl<'a> Writer for BufferMut<'a> {
+impl Writer for BufferMut<'_> {
     #[inline]
     fn write_one(self, v: u8) -> Self {
         self.write_one(v)

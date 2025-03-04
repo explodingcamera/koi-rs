@@ -1,9 +1,9 @@
 use std::io::{Read, Write};
 
 use crate::{
+    KoiDecodeError, KoiEncodeError,
     types::{Channels, Compression, MAGIC},
     util::{Buffer, BufferMut, Writer},
-    KoiDecodeError, KoiEncodeError,
 };
 use bson::{Binary, Document};
 
@@ -34,6 +34,7 @@ impl FileHeader {
         self.width as usize * self.height as usize * self.channels as usize * self.channels as usize
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         version: u32,
         exif: Option<Vec<u8>>,

@@ -10,7 +10,7 @@ mod formats;
 mod suite;
 mod util;
 
-use crate::suite::{generate_test_suites, FormatResult, Test};
+use crate::suite::{FormatResult, Test, generate_test_suites};
 use crate::util::from_png;
 
 // how many times to run each test (to get the minimum time)
@@ -49,7 +49,6 @@ fn main() -> io::Result<()> {
 
             suite.tests.push(Test {
                 input_size: input.len(),
-                name: file.to_string(),
                 results,
                 errored,
             });
