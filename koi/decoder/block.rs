@@ -1,8 +1,8 @@
 use crate::{
+    KoiDecodeError,
     file::FileHeader,
     types::*,
-    util::{cold, unlikely, Buffer, BufferMut, Writer},
-    KoiDecodeError,
+    util::{Buffer, BufferMut, Writer, cold, unlikely},
 };
 
 pub struct Image {

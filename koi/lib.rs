@@ -77,7 +77,7 @@ pub enum KoiEncodeError {
     Io(#[from] std::io::Error),
 
     #[error(transparent)]
-    Bson(#[from] bson::ser::Error),
+    Bson(#[from] bson::error::Error),
 
     #[error("Invalid length")]
     InvalidLength,
@@ -103,7 +103,7 @@ impl From<KoiEncodeError> for std::io::Error {
     fn from(err: KoiEncodeError) -> Self {
         match err {
             KoiEncodeError::Io(err) => err,
-            _ => std::io::Error::new(std::io::ErrorKind::Other, err),
+            _ => std::io::Error::other(err),
         }
     }
 }
@@ -112,7 +112,7 @@ impl From<KoiDecodeError> for std::io::Error {
     fn from(err: KoiDecodeError) -> Self {
         match err {
             KoiDecodeError::Io(err) => err,
-            _ => std::io::Error::new(std::io::ErrorKind::Other, err),
+            _ => std::io::Error::other(err),
         }
     }
 }

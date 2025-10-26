@@ -1,4 +1,4 @@
-use std::io::Result;
+use std::io::{Cursor, Result};
 
 use super::ImageFormat;
 
@@ -7,14 +7,13 @@ pub struct Png<const C: usize> {}
 
 impl<const C: usize> ImageFormat for Png<C> {
     fn encode(&mut self, data: &[u8], dimensions: (u32, u32)) -> Result<Vec<u8>> {
-        encode_png::<C>(png::Compression::Default, data, dimensions)
+        encode_png::<C>(png::Compression::Balanced, data, dimensions)
     }
 
     fn decode(&mut self, data: &[u8], dimensions: (u32, u32)) -> Result<Vec<u8>> {
-        let decoder = png::Decoder::new(data);
+        let decoder = png::Decoder::new(Cursor::new(data));
         let mut reader = decoder.read_info()?;
-        let mut out = vec![0; reader.output_buffer_size()];
-
+        let mut out = vec![0; reader.output_buffer_size().unwrap_or_default()];
         let info = reader.next_frame(&mut out)?;
 
         if info.width != dimensions.0 || info.height != dimensions.1 {
@@ -34,9 +33,9 @@ impl<const C: usize> ImageFormat for PngFast<C> {
     }
 
     fn decode(&mut self, data: &[u8], dimensions: (u32, u32)) -> Result<Vec<u8>> {
-        let decoder = png::Decoder::new(data);
+        let decoder = png::Decoder::new(Cursor::new(data));
         let mut reader = decoder.read_info()?;
-        let mut out = vec![0; reader.output_buffer_size()];
+        let mut out = vec![0; reader.output_buffer_size().unwrap_or_default()];
 
         let info = reader.next_frame(&mut out)?;
 

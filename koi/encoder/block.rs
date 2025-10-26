@@ -1,11 +1,11 @@
 use crate::{
+    KoiEncodeError,
     file::FileHeader,
     types::*,
     util::{BufferMut, Writer},
-    KoiEncodeError,
 };
 
-// has to be devisible by 1, 2, 3 and 4 so chunks_exact works properly
+// has to be divisible by 1, 2, 3 and 4 so chunks_exact works properly
 const CHUNK_SIZE: usize = MAX_CHUNK_SIZE; // about 200kb
 
 pub fn encode_to_vec<const C: usize>(

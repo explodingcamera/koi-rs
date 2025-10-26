@@ -1,5 +1,5 @@
 use super::writer::Writer;
-use crate::types::{Channels, Op, Pixel, END_OF_IMAGE};
+use crate::types::{Channels, END_OF_IMAGE, Op, Pixel};
 use lz4_flex::frame::FrameEncoder;
 use std::io::{self, Read, Write};
 
@@ -50,11 +50,12 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
     fn encode_pixel(&mut self, curr_pixel: Pixel<C>, prev_pixel: Pixel<C>) -> std::io::Result<()> {
         self.pixels_in += 1;
         // alpha diff encoding (whenever only alpha channel changes)
-        if (C == 2 || C == 4) && curr_pixel.rgb() == prev_pixel.rgb() {
-            if let Some(diff) = prev_pixel.alpha_diff(&curr_pixel) {
-                self.writer.write_one(diff)?;
-                return Ok(());
-            }
+        if (C == 2 || C == 4)
+            && curr_pixel.rgb() == prev_pixel.rgb()
+            && let Some(diff) = prev_pixel.alpha_diff(&curr_pixel)
+        {
+            self.writer.write_one(diff)?;
+            return Ok(());
         }
 
         let is_gray = curr_pixel.is_gray();
@@ -132,7 +133,7 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
             self.prev_pixel = curr_pixel;
         }
 
-        if buf.len() % C != 0 {
+        if !buf.len().is_multiple_of(C) {
             // save the remainder for the next write
             self.remainder = buf[buf.len() - (buf.len() % C)..].into();
         }
@@ -167,10 +168,7 @@ impl<W: Write, const C: usize> Write for PixelEncoder<W, C> {
         if !self.remainder.is_empty() {
             println!("remainder buffer not empty, are the amount of channels correct?");
             println!("remainder: {:?}", self.remainder);
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "buffer not empty",
-            ))
+            Err(std::io::Error::other("buffer not empty"))
         } else {
             Ok(())
         }

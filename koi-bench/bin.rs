@@ -19,10 +19,7 @@ static RUNS: usize = 2;
 fn main() -> io::Result<()> {
     let mut suites = generate_test_suites("images");
 
-    println!(
-        " \x1b[1mRunning benchmarks\x1b[0m ({} runs per image)",
-        RUNS
-    );
+    println!(" \x1b[1mRunning benchmarks\x1b[0m ({RUNS} runs per image)",);
 
     for suite in suites.values_mut() {
         if suite.files.is_empty() {
@@ -60,13 +57,13 @@ fn main() -> io::Result<()> {
     println!("\n \x1b[1mResults\x1b[0m");
 
     for suite in suites.values() {
-        let successfull_tests = suite
+        let successful_tests = suite
             .tests
             .iter()
             .filter(|t| !t.errored)
             .collect::<Vec<_>>();
 
-        print_results(successfull_tests, &suite.name, TimeFormat::Milliseconds);
+        print_results(successful_tests, &suite.name, TimeFormat::Milliseconds);
     }
 
     let all_tests = suites

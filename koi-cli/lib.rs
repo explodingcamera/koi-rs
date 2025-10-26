@@ -5,10 +5,10 @@ fn read_png(path: &str) -> (Vec<u8>, (u32, u32)) {
     let data = File::open(path).unwrap();
     let mut options = png::DecodeOptions::default();
     options.set_ignore_crc(true);
-    let mut decoder = png::Decoder::new_with_options(data, options);
+    let mut decoder = png::Decoder::new_with_options(BufReader::new(data), options);
     decoder.set_transformations(png::Transformations::EXPAND);
     let mut reader = decoder.read_info().unwrap();
-    let mut buf = vec![0; reader.output_buffer_size()];
+    let mut buf = vec![0; reader.output_buffer_size().unwrap_or_default()];
     reader.next_frame(&mut buf).unwrap();
     let info = reader.info().clone();
     println!("{:?}", info);
