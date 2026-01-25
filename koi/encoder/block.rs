@@ -11,7 +11,7 @@ const CHUNK_SIZE: usize = MAX_CHUNK_SIZE; // about 200kb
 pub fn encode_to_vec<const C: usize>(
     data: &[u8],
     header: FileHeader,
-    compression_level: CompressionLevel,
+    compression_level: Compression,
 ) -> Result<Vec<u8>, KoiEncodeError> {
     let mut out = vec![0; header.width as usize * header.height as usize * C];
     let len = encode::<C>(data, &mut out, header, compression_level)?;
@@ -24,13 +24,15 @@ pub fn encode<const C: usize>(
     data: &[u8],
     out: &mut [u8],
     header: FileHeader,
-    compression_level: CompressionLevel,
+    compression_level: Compression,
 ) -> Result<usize, KoiEncodeError> {
     if header.version != 1 {
         return Err(KoiEncodeError::UnsupportedVersion(header.version as u8));
     }
 
-    if compression_level == CompressionLevel::None && header.compression != Compression::None {
+    if compression_level == Compression::None
+        && header.compression != crate::types::Compression::None
+    {
         return Err(KoiEncodeError::InvalidHeader(
             "compression level is None but header.compression is not None".to_string(),
         ));
@@ -80,10 +82,8 @@ pub fn encode<const C: usize>(
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum CompressionLevel {
-    Lz4Flex,
-    Lz4(i32),
-    Lz4Hc(i32),
+pub enum Compression {
+    Lz4,
     None,
 }
 
@@ -91,27 +91,14 @@ pub enum CompressionLevel {
 pub fn compress(
     input: &[u8],
     mut output: &mut [u8],
-    level: CompressionLevel,
+    level: Compression,
 ) -> Result<usize, KoiEncodeError> {
     let out_size = match level {
-        CompressionLevel::Lz4(level) => {
-            lzzzz::lz4::compress(&input, &mut output, level).map_err(|e| {
-                println!("error: {}", e);
-                KoiEncodeError::InvalidLength
-            })?
-        }
-
-        CompressionLevel::Lz4Hc(level) => lzzzz::lz4_hc::compress(&input, &mut output, level)
-            .map_err(|e| {
-                println!("error: {}", e);
-                KoiEncodeError::InvalidLength
-            })?,
-
-        CompressionLevel::Lz4Flex => lz4_flex::compress_into(&input, &mut output).map_err(|e| {
+        Compression::Lz4 => lz4_flex::compress_into(&input, &mut output).map_err(|e| {
             println!("error: {}", e);
             KoiEncodeError::InvalidLength
         })?,
-        CompressionLevel::None => {
+        Compression::None => {
             output[..input.len()].copy_from_slice(input);
             input.len()
         }

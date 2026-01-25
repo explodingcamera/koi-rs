@@ -135,14 +135,7 @@ fn decompress(
             Ok(data.len())
         }
         Compression::Lz4 => {
-            // let len = lz4_flex::block::decompress_into(&data, &mut out).map_err(|e| {
-            //     println!("error: {}", e);
-            //     KoiDecodeError::Decompress(e.to_string())
-            // })?;
-            // Ok(len)
-
-            // lzzz is slightly faster than lz4_flex, but not portable
-            let len = lzzzz::lz4::decompress(&data, &mut out).map_err(|e| {
+            let len = lz4_flex::block::decompress_into(&data, &mut out).map_err(|e| {
                 println!("error: {}", e);
                 KoiDecodeError::Decompress(e.to_string())
             })?;

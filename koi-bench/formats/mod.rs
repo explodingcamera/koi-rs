@@ -3,7 +3,6 @@ pub mod png;
 pub mod qoi;
 pub mod webp;
 
-use ::koi::util::cold;
 use strum_macros::{Display, EnumIter};
 
 #[derive(Debug, Display, EnumIter, PartialEq, Eq, Hash, Ord, PartialOrd, Clone, Copy)]
@@ -11,7 +10,6 @@ pub enum ImageFormatType {
     Png,
     PngFast,
     Koi,
-    KoiFast,
     Qoi,
 }
 
@@ -21,7 +19,6 @@ impl ImageFormatType {
             ImageFormatType::Png => Box::new(png::Png::<C> {}),
             ImageFormatType::PngFast => Box::new(png::PngFast::<C> {}),
             ImageFormatType::Koi => Box::new(koi::Koi::<C> {}),
-            ImageFormatType::KoiFast => Box::new(koi::KoiFast::<C> {}),
             ImageFormatType::Qoi => Box::new(qoi::Qoi::<C>::new()),
         }
     }
@@ -31,8 +28,7 @@ impl ImageFormatType {
             3 => self.get_impl::<3>(),
             4 => self.get_impl::<4>(),
             _ => {
-                cold();
-                panic!("Unsupported number of channels")
+                unreachable!("Unsupported number of channels")
             }
         }
     }
