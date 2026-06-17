@@ -9,8 +9,8 @@ path="bin.rs"
 
 [dependencies]
 indicatif="0.18"
-strum="0.27"
-strum_macros="0.27"
+strum="0.28"
+strum_macros="0.28"
 walkdir="2.5"
 
 koi={path="../koi"}
