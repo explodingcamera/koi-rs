@@ -51,9 +51,8 @@ pub fn encode<const C: usize>(
         let mut out_chunk_buf = BufferMut::new(&mut out_chunk);
         let pixel_count = chunk.len() / C;
 
-        for px in chunk.chunks_exact(C) {
-            let px: [u8; C] = unsafe { px.try_into().unwrap_unchecked() };
-            let curr_pixel = px.into();
+        for px in chunk.as_chunks::<C>().0 {
+            let curr_pixel = (*px).into();
             out_chunk_buf = encode_px::<C>(curr_pixel, prev_pixel, out_chunk_buf);
             prev_pixel = curr_pixel;
         }

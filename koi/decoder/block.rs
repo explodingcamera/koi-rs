@@ -2,8 +2,9 @@ use crate::{
     KoiDecodeError,
     file::FileHeader,
     types::*,
-    util::{Buffer, BufferMut, Writer, cold, unlikely},
+    util::{Buffer, BufferMut, Writer},
 };
+use std::hint::cold_path;
 
 pub struct Image {
     pub header: FileHeader,
@@ -71,7 +72,8 @@ fn decode_impl<const C: usize>(
             break;
         }
 
-        if unlikely(len as usize > (MAX_CHUNK_SIZE * 2)) {
+        if len as usize > (MAX_CHUNK_SIZE * 2) {
+            cold_path();
             panic!("chunk too big: {}", len);
         }
 
@@ -113,11 +115,11 @@ fn decode_px<'a, const C: usize>(
         }
 
         [opcode, ..] => {
-            cold();
+            cold_path();
             panic!("Invalid opcode {}", opcode);
         }
         _ => {
-            cold();
+            cold_path();
             panic!("Invalid opcode");
         }
     }

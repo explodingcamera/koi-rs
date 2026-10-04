@@ -1,25 +1,5 @@
 use std::ops::{Deref, DerefMut};
 
-#[inline]
-#[cold]
-pub fn cold() {}
-
-#[inline]
-pub fn likely(b: bool) -> bool {
-    if !b {
-        cold()
-    }
-    b
-}
-
-#[inline]
-pub fn unlikely(b: bool) -> bool {
-    if b {
-        cold()
-    }
-    b
-}
-
 pub struct Buffer<'a>(&'a [u8]);
 
 impl<'a> Buffer<'a> {

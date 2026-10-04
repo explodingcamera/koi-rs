@@ -126,8 +126,8 @@ impl<W: Write, const C: usize> PixelEncoder<W, C> {
 
     #[inline]
     fn write_aligned(&mut self, buf: &[u8]) -> std::io::Result<()> {
-        for chunk in buf.chunks_exact(C) {
-            let curr_pixel: Pixel<C> = chunk.into();
+        for chunk in buf.as_chunks::<C>().0 {
+            let curr_pixel: Pixel<C> = (*chunk).into();
 
             self.encode_pixel(curr_pixel, self.prev_pixel)?;
             self.prev_pixel = curr_pixel;

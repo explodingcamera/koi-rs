@@ -1,11 +1,9 @@
 use lz4_flex::frame::FrameDecoder;
+use std::hint::cold_path;
 use std::io::{self, BufReader, Read, Write};
 
 use super::reader::Reader;
-use crate::{
-    types::*,
-    util::{cold, likely, unlikely},
-};
+use crate::types::*;
 
 pub struct PixelDecoder<R: Read, const C: usize> {
     read_decoder: Reader<R>,
@@ -87,7 +85,8 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
     //                 Pixel::from_grayscale(b2)
     //             }
     //             OP_GRAY_ALPHA => {
-    //                 if unlikely(C < Channels::GrayAlpha as u8 as usize) {
+    //                 if C < Channels::GrayAlpha as u8 as usize {
+    //                     cold_path();
     //                     return Err(std::io::Error::new(
     //                         std::io::ErrorKind::InvalidData,
     //                         format!("Invalid opcode GRAY_ALPHA for {} channels", C),
@@ -102,7 +101,8 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
     //                 Pixel::from([b2, b3, b4])
     //             }
     //             OP_RGBA => {
-    //                 if unlikely(C < Channels::Rgba as u8 as usize) {
+    //                 if C < Channels::Rgba as u8 as usize {
+    //                     cold_path();
     //                     return Err(std::io::Error::new(
     //                         std::io::ErrorKind::InvalidData,
     //                         format!("Invalid opcode RGBA for {} channels", C),
@@ -146,13 +146,18 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
             self.handle_end_of_image()?;
         }
 
-        while likely(buffer_pos < buffer_len && self.pixels_in < self.pixels_count && !buffer_empty)
-        {
+        loop {
+            if buffer_pos >= buffer_len || self.pixels_in >= self.pixels_count || buffer_empty {
+                cold_path();
+                break;
+            }
+
             let buffer_offset = pixels_read * C;
             let required_bytes = Self::get_required_bytes(buffer[buffer_pos]);
             let available_bytes = buffer_len - 1 - buffer_pos;
 
-            if unlikely(required_bytes > available_bytes) {
+            if required_bytes > available_bytes {
+                cold_path();
                 buffer_empty = true;
                 // read "required_bytes" bytes from read_decoder
                 let mut new_bytes = [0u8; 4];
@@ -186,7 +191,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
             OP_DIFF..=OP_DIFF_END => 0,
             OP_LUMA..=OP_LUMA_END => 1,
             _ => {
-                cold();
+                cold_path();
                 panic!("Invalid opcode {}", opcode)
             }
         }
@@ -227,7 +232,8 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
                 Pixel::from([r, g, b])
             }
             OP_RGBA => {
-                if unlikely(C < Channels::Rgba as u8 as usize) {
+                if C < Channels::Rgba as u8 as usize {
+                    cold_path();
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidData,
                         format!("Invalid opcode RGBA for {} channels", C),
@@ -242,7 +248,7 @@ impl<R: Read, const C: usize> PixelDecoder<R, C> {
                 self.last_px.apply_luma(b1, b2)
             }
             _ => {
-                cold();
+                cold_path();
                 panic!("Invalid opcode {}", b1)
             }
         };

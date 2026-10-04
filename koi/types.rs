@@ -1,4 +1,4 @@
-use crate::util::cold;
+use std::hint::cold_path;
 
 // magic number to identify koi files
 pub(crate) const MAGIC: [u8; 4] = *b"KOI ";
@@ -60,7 +60,7 @@ impl From<u8> for Op {
             OP_RGB => Op::Rgb,
             OP_RGBA => Op::Rgba,
             _ => {
-                cold();
+                cold_path();
                 panic!("Invalid opcode {}", op)
             }
         }
@@ -280,7 +280,7 @@ impl TryFrom<u8> for Channels {
             3 => Ok(Channels::Rgb),
             4 => Ok(Channels::Rgba),
             _ => {
-                cold();
+                cold_path();
                 Err(())
             }
         }
